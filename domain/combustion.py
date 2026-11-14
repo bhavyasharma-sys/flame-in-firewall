@@ -27,6 +27,11 @@ MATERIAL_BASE_LOI: dict[str, float] = {
     "Nylon-6": 21.0,
     "Polyethylene": 17.0,
     "Velcro Strips": 16.5,
+    "Kevlar": 29.0,
+    "Cellulose (Paper)": 18.0,
+    "Foam Insulation (Polyurethane)": 16.5,
+    "Electrical Wire Insulation (Cross-linked ETFE)": 26.0,
+    "Polycarbonate": 25.0,
 }
 
 # Material display aliases -> canonical key
@@ -67,6 +72,17 @@ MATERIAL_ALIASES: dict[str, str] = {
     "velcro": "Velcro Strips",
     "velcro® strips": "Velcro Strips",
     "velcro strips": "Velcro Strips",
+    "velcro (hook and loop)": "Velcro Strips",
+    "kevlar": "Kevlar",
+    "cellulose": "Cellulose (Paper)",
+    "cellulose (paper)": "Cellulose (Paper)",
+    "paper": "Cellulose (Paper)",
+    "foam insulation (polyurethane)": "Foam Insulation (Polyurethane)",
+    "polyurethane": "Foam Insulation (Polyurethane)",
+    "polyurethane foam": "Foam Insulation (Polyurethane)",
+    "electrical wire insulation (cross-linked etfe)": "Electrical Wire Insulation (Cross-linked ETFE)",
+    "etfe": "Electrical Wire Insulation (Cross-linked ETFE)",
+    "polycarbonate": "Polycarbonate",
 }
 
 DILUENT_SHIFT: dict[str, float] = {
@@ -75,6 +91,33 @@ DILUENT_SHIFT: dict[str, float] = {
     "He": 2.0,
     "Ar": -1.0,
 }
+
+ALLOWED_DILUENTS: frozenset[str] = frozenset(DILUENT_SHIFT.keys())
+ALLOWED_CANONICAL_MATERIALS: frozenset[str] = frozenset(MATERIAL_BASE_LOI.keys())
+_EXACT_MATERIAL_MAP: dict[str, str] = {
+    **{k.lower(): k for k in MATERIAL_BASE_LOI},
+    **MATERIAL_ALIASES,
+}
+
+
+def validate_material(name: str) -> str | None:
+    """Return canonical material name if `name` is an allowed material/alias, else None."""
+    if not isinstance(name, str) or not name.strip():
+        return None
+    cleaned = name.strip()
+    if cleaned in MATERIAL_BASE_LOI:
+        return cleaned
+    return _EXACT_MATERIAL_MAP.get(cleaned.lower())
+
+
+def validate_diluent(diluent: str) -> str | None:
+    """Return canonical diluent symbol if in {N2, CO2, He, Ar}, else None."""
+    if not isinstance(diluent, str) or not diluent.strip():
+        return None
+    cleaned = diluent.strip()
+    if cleaned in ALLOWED_DILUENTS:
+        return cleaned
+    return None
 
 
 def canonical_material(name: str) -> str:

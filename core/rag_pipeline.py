@@ -197,7 +197,9 @@ class RAGPipeline:
         user_question: str,
         top_k: int = TOP_K_RESULTS,
         scenario: Optional[dict[str, Any]] = None,
+        memory_override: Optional[ConversationMemory] = None,
     ) -> dict[str, Any]:
+        active_memory = memory_override or self.memory
         is_brief = any(t in user_question.lower() for t in _BRIEF_TRIGGERS)
         in_domain = is_brief or bool(scenario) or self._is_in_domain(user_question)
 
@@ -208,6 +210,7 @@ class RAGPipeline:
                 "search_results": [],
                 "matched_runs": [],
                 "kg_context": "",
+                "kg_fact_count": 0,
                 "cabin_eval": None,
                 "context": "",
                 "sources": [],
@@ -226,6 +229,7 @@ class RAGPipeline:
         # 2. Knowledge Graph traversal
         kg_subgraph = self._query_knowledge_graph(user_question)
         kg_context = self.knowledge_graph.to_context_string(kg_subgraph) if kg_subgraph else ""
+        kg_fact_count = min(kg_subgraph.number_of_edges(), 25) if kg_subgraph else 0
 
         # 3. Structured run lookup
         matched_runs = self._lookup_relevant_runs(user_question, scenario=scenario)
@@ -261,7 +265,7 @@ class RAGPipeline:
         # 5. Format combined context bounded by operational safeguard
         vs_ctx = self._format_vector_results(search_results)
         runs_ctx = self._format_runs_context(matched_runs)
-        mem_ctx = self.memory.get_recent_context(n=4)
+        mem_ctx = active_memory.get_recent_context(n=4)
         sections = [s for s in (cabin_ctx, vs_ctx, runs_ctx, kg_context, mem_ctx) if s]
         combined = "\n\n".join(sections)
         limit = BRIEF_MAX_CONTEXT_CHARS if is_brief else MAX_CONTEXT_CHARS
@@ -284,6 +288,7 @@ class RAGPipeline:
             "search_results": search_results,
             "matched_runs": matched_runs,
             "kg_context": kg_context,
+            "kg_fact_count": kg_fact_count,
             "cabin_eval": cabin_eval,
             "context": combined,
             "sources": sources,
@@ -298,13 +303,18 @@ class RAGPipeline:
         user_question: str,
         top_k: int = TOP_K_RESULTS,
         scenario: Optional[dict[str, Any]] = None,
+        memory_override: Optional[ConversationMemory] = None,
     ) -> dict[str, Any]:
+        active_memory = memory_override or self.memory
         conv = self._evaluate_conversational_intent(user_question)
         if conv is not None:
-            self.memory.add_turn(user_question, conv["answer"], [])
+            active_memory.add_turn(user_question, conv["answer"], [])
+            conv["provider"] = self.llm.display_label
             return conv
 
-        prep = self._prepare_query(user_question, top_k=top_k, scenario=scenario)
+        prep = self._prepare_query(
+            user_question, top_k=top_k, scenario=scenario, memory_override=active_memory
+        )
         answer = str(
             self.llm.generate(
                 question=user_question,
@@ -336,13 +346,14 @@ class RAGPipeline:
             else audit_citations(answer, self._valid_doc_pages, self._valid_doc_ids, self._valid_exp_ids)
         )
 
-        self.memory.add_turn(user_question, answer, prep["sources"])
+        active_memory.add_turn(user_question, answer, prep["sources"])
 
         return {
             "answer": answer,
             "sources": prep["sources"],
             "evidence": prep["evidence"],
             "kg_context": prep["kg_context"],
+            "kg_fact_count": prep["kg_fact_count"],
             "chart": prep["chart"],
             "citations": citations,
             "cabin_eval": prep["cabin_eval"],
@@ -357,24 +368,42 @@ class RAGPipeline:
         user_question: str,
         top_k: int = TOP_K_RESULTS,
         scenario: Optional[dict[str, Any]] = None,
+        memory_override: Optional[ConversationMemory] = None,
     ) -> Generator[dict[str, Any], None, None]:
         """Yield SSE event dictionaries: sources -> chart -> token* -> audit -> done."""
+        active_memory = memory_override or self.memory
         conv = self._evaluate_conversational_intent(user_question)
         if conv is not None:
-            yield {"event": "sources", "data": {"sources": [], "evidence": [], "out_of_scope": False}}
+            yield {
+                "event": "sources",
+                "data": {"sources": [], "evidence": [], "out_of_scope": False, "kg_fact_count": 0},
+            }
             yield {"event": "token", "data": {"token": conv["answer"]}}
-            yield {"event": "audit", "data": conv["citations"]}
-            yield {"event": "done", "data": {"provider": self.llm.display_label}}
-            self.memory.add_turn(user_question, conv["answer"], [])
+            yield {
+                "event": "audit",
+                "data": {
+                    **conv["citations"],
+                    "provider": self.llm.display_label,
+                    "out_of_scope": False,
+                },
+            }
+            yield {
+                "event": "done",
+                "data": {"provider": self.llm.display_label, "final_answer": conv["answer"]},
+            }
+            active_memory.add_turn(user_question, conv["answer"], [])
             return
 
-        prep = self._prepare_query(user_question, top_k=top_k, scenario=scenario)
+        prep = self._prepare_query(
+            user_question, top_k=top_k, scenario=scenario, memory_override=active_memory
+        )
         yield {
             "event": "sources",
             "data": {
                 "sources": prep["sources"],
                 "evidence": prep["evidence"],
                 "out_of_scope": prep["out_of_scope"],
+                "kg_fact_count": prep["kg_fact_count"],
                 "cabin_eval": prep["cabin_eval"],
             },
         }
@@ -420,9 +449,19 @@ class RAGPipeline:
             if prep["out_of_scope"]
             else audit_citations(full_answer, self._valid_doc_pages, self._valid_doc_ids, self._valid_exp_ids)
         )
-        yield {"event": "audit", "data": citations}
-        yield {"event": "done", "data": {"provider": self.llm.display_label}}
-        self.memory.add_turn(user_question, full_answer, prep["sources"])
+        yield {
+            "event": "audit",
+            "data": {
+                **citations,
+                "provider": self.llm.display_label,
+                "out_of_scope": prep["out_of_scope"],
+            },
+        }
+        yield {
+            "event": "done",
+            "data": {"provider": self.llm.display_label, "final_answer": full_answer},
+        }
+        active_memory.add_turn(user_question, full_answer, prep["sources"])
 
     # ── Helpers ───────────────────────────────────────────────────────────────
 

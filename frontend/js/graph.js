@@ -40,6 +40,11 @@ let isPanning = false;
 let dragNode = null;
 let lastMouse = { x: 0, y: 0 };
 let initialized = false;
+let layoutBuiltWithSize = false;
+
+const getNodeType = (n) => n?.node_type ?? n?.type ?? 'other';
+const getNodeLabel = (n) => n?.display_name ?? n?.label ?? n?.id ?? '';
+const getEdgeRel = (e) => e?.relationship ?? e?.relation ?? 'related';
 
 export async function initGraph() {
   canvas = document.getElementById('kg-canvas');
@@ -62,8 +67,14 @@ export async function initGraph() {
 
   on('tab:changed', (tab) => {
     if (tab === 'graph') {
-      resizeCanvas();
-      drawGraph();
+      requestAnimationFrame(() => {
+        resizeCanvas();
+        if (rawGraph && (!layoutBuiltWithSize || !simNodes.length)) {
+          rebuildLayout();
+        } else {
+          drawGraph();
+        }
+      });
     }
   });
   on('theme:changed', () => drawGraph());
@@ -99,16 +110,18 @@ function rebuildLayout() {
   if (!rawGraph) return;
   resizeCanvas();
 
-  const w = canvas.clientWidth || 800;
-  const h = canvas.clientHeight || 560;
+  const rect = canvas.getBoundingClientRect();
+  layoutBuiltWithSize = rect.width > 0 && rect.height > 0;
+  const w = rect.width || canvas.clientWidth || 800;
+  const h = rect.height || canvas.clientHeight || 560;
   const cx = w / 2;
   const cy = h / 2;
 
-  const filteredNodes = rawGraph.nodes.filter((n) => activeTypes.has(n.type));
+  const filteredNodes = (rawGraph.nodes || []).filter((n) => activeTypes.has(getNodeType(n)));
   // Cap large node sets smoothly so canvas stays snappy & legible
   const capped = filteredNodes.slice(0, 120);
   const idSet = new Set(capped.map((n) => n.id));
-  const edges = rawGraph.edges.filter((e) => idSet.has(e.source) && idSet.has(e.target));
+  const edges = (rawGraph.edges || []).filter((e) => idSet.has(e.source) && idSet.has(e.target));
 
   // Initial radial placement by node type
   const rings = {
@@ -121,27 +134,37 @@ function rebuildLayout() {
   };
   const byType = {};
   for (const n of capped) {
-    (byType[n.type] ||= []).push(n);
+    const t = getNodeType(n);
+    (byType[t] ||= []).push(n);
   }
 
   simNodes = capped.map((n) => {
-    const group = byType[n.type];
+    const t = getNodeType(n);
+    const group = byType[t];
     const idx = group.indexOf(n);
-    const angle = (idx / Math.max(1, group.length)) * Math.PI * 2 + (n.type.length * 0.4);
-    const r = (rings[n.type] || 220) * (0.88 + ((idx % 3) * 0.08));
+    const angle = (idx / Math.max(1, group.length)) * Math.PI * 2 + (t.length * 0.4);
+    const r = (rings[t] || 220) * (0.88 + ((idx % 3) * 0.08));
     return {
       ...n,
+      type: t,
+      node_type: t,
+      label: getNodeLabel(n),
       x: cx + Math.cos(angle) * r,
       y: cy + Math.sin(angle) * r,
       vx: 0,
       vy: 0,
-      radius: n.type === 'experiment' ? 11 : n.type === 'paper' ? 9 : n.type === 'material' ? 8 : 6.5,
+      radius: t === 'experiment' ? 11 : t === 'paper' ? 9 : t === 'material' ? 8 : 6.5,
     };
   });
 
   const nodeMap = new Map(simNodes.map((n) => [n.id, n]));
   simEdges = edges
-    .map((e) => ({ source: nodeMap.get(e.source), target: nodeMap.get(e.target), relation: e.relation }))
+    .map((e) => ({
+      source: nodeMap.get(e.source),
+      target: nodeMap.get(e.target),
+      relation: getEdgeRel(e),
+      relationship: getEdgeRel(e),
+    }))
     .filter((e) => e.source && e.target);
 
   // Run fast deterministic force relaxation (85 ticks)
@@ -290,7 +313,7 @@ function bindGraphEvents() {
   document.getElementById('kg-search-input')?.addEventListener('input', (e) => {
     searchNeedle = e.target.value.trim().toLowerCase();
     if (searchNeedle) {
-      const match = simNodes.find((n) => (n.label || n.id).toLowerCase().includes(searchNeedle));
+      const match = simNodes.find((n) => getNodeLabel(n).toLowerCase().includes(searchNeedle) || String(n.id).toLowerCase().includes(searchNeedle));
       if (match) selectNode(match);
     }
     drawGraph();
@@ -345,8 +368,10 @@ function drawGraph() {
 
   // Nodes
   for (const n of simNodes) {
-    const col = TYPE_COLORS[n.type] || '#94a3b8';
-    const isMatch = searchNeedle && (n.label || n.id).toLowerCase().includes(searchNeedle);
+    const nType = getNodeType(n);
+    const nLabel = getNodeLabel(n);
+    const col = TYPE_COLORS[nType] || '#94a3b8';
+    const isMatch = searchNeedle && (nLabel.toLowerCase().includes(searchNeedle) || String(n.id).toLowerCase().includes(searchNeedle));
     const dim = selectedNode && !connected.has(n.id);
 
     ctx.globalAlpha = dim ? 0.2 : 1.0;
@@ -361,11 +386,11 @@ function drawGraph() {
       ctx.stroke();
     }
 
-    if (n.type === 'experiment' || n.type === 'paper' || selectedNode?.id === n.id || isMatch || zoom > 1.25) {
-      ctx.font = `${n.type === 'experiment' ? '600 ' : ''}10.5px Inter, sans-serif`;
+    if (nType === 'experiment' || nType === 'paper' || selectedNode?.id === n.id || isMatch || zoom > 1.25) {
+      ctx.font = `${nType === 'experiment' ? '600 ' : ''}10.5px Inter, sans-serif`;
       ctx.fillStyle = isLight ? '#0f172a' : '#e2e8f0';
       ctx.textAlign = 'center';
-      const label = (n.label || n.id).slice(0, 26);
+      const label = nLabel.slice(0, 26);
       ctx.fillText(label, n.x, n.y - n.radius - 5);
     }
   }
@@ -379,21 +404,25 @@ async function selectNode(node) {
   drawGraph();
   const panel = document.getElementById('kg-inspector');
   if (!panel) return;
+  const nType = getNodeType(node);
+  const nLabel = getNodeLabel(node);
+  const badgeColor = TYPE_COLORS[nType] || '#94a3b8';
   try {
     const detail = await api.graphNode(node.id);
-    const outgoing = detail.outgoing || [];
-    const incoming = detail.incoming || [];
+    const outgoing = detail.outbound ?? detail.outgoing ?? [];
+    const incoming = detail.inbound ?? detail.incoming ?? [];
+    const docId = node.doc_id || detail.attributes?.doc_id || node.id;
 
     panel.innerHTML = `
       <div class="flex items-center gap-2 mb-3">
-        <span class="badge" style="background:${TYPE_COLORS[node.type]}22;color:${TYPE_COLORS[node.type]};border-color:${TYPE_COLORS[node.type]}55;">
-          ${esc(TYPE_LABELS[node.type] || node.type)}
+        <span class="badge" style="background:${badgeColor}22;color:${badgeColor};border-color:${badgeColor}55;">
+          ${esc(TYPE_LABELS[nType] || nType)}
         </span>
       </div>
-      <h3 style="font-family:var(--font-display);font-size:17px;margin:0 0 8px;">${esc(node.label || node.id)}</h3>
+      <h3 style="font-family:var(--font-display);font-size:17px;margin:0 0 8px;">${esc(nLabel)}</h3>
       <div class="flex gap-2 flex-wrap mb-3">
         <button type="button" class="btn btn-primary btn-sm" id="kg-ask-node-btn">Ask FlameAI</button>
-        ${node.type === 'paper' ? `<button type="button" class="btn btn-cyan btn-sm" data-doc-id="${esc(node.id)}" data-doc-page="1">Open NASA Paper</button>` : ''}
+        ${nType === 'paper' ? `<button type="button" class="btn btn-cyan btn-sm" data-doc-id="${esc(docId)}" data-doc-page="1">Open NASA Paper</button>` : ''}
       </div>
 
       <div style="font-size:12px;">
@@ -405,7 +434,7 @@ async function selectNode(node) {
                 .map(
                   (o) =>
                     `<div style="padding:6px 8px;background:var(--bg-surface-2);border-radius:7px;margin-bottom:5px;">
-                      <span class="mono" style="color:var(--accent-cyan);font-size:10.5px;">${esc(o.relation)}</span>
+                      <span class="mono" style="color:var(--accent-cyan);font-size:10.5px;">${esc(o.relationship ?? o.relation ?? 'related')}</span>
                       → <strong>${esc(o.target)}</strong>
                     </div>`
                 )
@@ -422,7 +451,7 @@ async function selectNode(node) {
                   (i) =>
                     `<div style="padding:6px 8px;background:var(--bg-surface-2);border-radius:7px;margin-bottom:5px;">
                       <strong>${esc(i.source)}</strong>
-                      → <span class="mono" style="color:var(--accent-flame);font-size:10.5px;">${esc(i.relation)}</span>
+                      → <span class="mono" style="color:var(--accent-flame);font-size:10.5px;">${esc(i.relationship ?? i.relation ?? 'related')}</span>
                     </div>`
                 )
                 .join('')
@@ -432,7 +461,7 @@ async function selectNode(node) {
     `;
 
     panel.querySelector('#kg-ask-node-btn')?.addEventListener('click', () => {
-      emit('chat:ask', `Explain how "${node.label || node.id}" connects to NASA microgravity fire safety experiments, material flammability, and spacecraft design guidelines.`);
+      emit('chat:ask', `Explain how "${nLabel}" connects to NASA microgravity fire safety experiments, material flammability, and spacecraft design guidelines.`);
     });
   } catch (err) {
     panel.innerHTML = `<div class="text-muted">Could not inspect node: ${esc(err.message)}</div>`;

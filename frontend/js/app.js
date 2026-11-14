@@ -8,12 +8,12 @@ import { api } from './api.js';
 import { initCabin } from './cabin.js';
 import { initChat } from './chat.js';
 import { initDashboard } from './dashboard.js';
-import { initExplorer } from './explorer.js';
+import { initExplorer, openExperimentModal } from './explorer.js';
 import { initFlameTwin } from './flame-twin.js';
 import { initGraph } from './graph.js';
-import { initRanking, selectRunForTelemetry } from './ranking.js';
+import { initRanking, openEntityRankingTab, selectRunForTelemetry } from './ranking.js';
 import { initResources, openDocumentReader } from './resources.js';
-import { emit, esc, on, riskColor, setTheme, state } from './state.js';
+import { emit, esc, on, riskColor, setActiveCabin, setTheme, state } from './state.js';
 
 function navigate(tab) {
   state.activeTab = tab;
@@ -76,7 +76,7 @@ function initGlobalSearch() {
             )
             .join('');
           dropdown.querySelectorAll('[data-sr-tab]').forEach((row) => {
-            row.addEventListener('click', () => {
+            row.addEventListener('click', async () => {
               dropdown.classList.remove('open');
               input.value = '';
               const type = row.dataset.srType;
@@ -86,6 +86,27 @@ function initGlobalSearch() {
               } else if (type === 'test_run') {
                 navigate('ranking');
                 selectRunForTelemetry(id);
+              } else if (type === 'material') {
+                navigate('cabin');
+                let targetMat = id;
+                try {
+                  const res = await fetch(`/api/materials/${encodeURIComponent(id)}`);
+                  if (res.ok) {
+                    const data = await res.json();
+                    if (data.canonical_name) targetMat = data.canonical_name;
+                  }
+                } catch {
+                  // fall back to id
+                }
+                setActiveCabin({ fuel_material: targetMat });
+              } else if (type === 'guideline') {
+                navigate('ranking');
+                openEntityRankingTab('guidelines');
+              } else if (type === 'experiment') {
+                navigate('explorer');
+                openExperimentModal(id);
+              } else if (type === 'finding') {
+                await openFindingModal(id);
               } else {
                 navigate(row.dataset.srTab);
               }
@@ -135,6 +156,49 @@ function openModal({ title, subtitle = '', bodyHtml = '', scrollToId = null }) {
   }
 }
 
+async function openFindingModal(findingId) {
+  try {
+    const data = await api.findingDetail(findingId);
+    const f = data.finding;
+    const similar = data.similar || [];
+    const html = `
+      <div class="flex flex-wrap gap-2 mb-3">
+        <span class="badge badge-cyan">${esc(f.source_experiment || 'NASA')}</span>
+        <span class="badge badge-flame">${esc(f.safety_relevance || 'High')}</span>
+        ${f.category ? `<span class="badge">${esc(f.category)}</span>` : ''}
+      </div>
+      <p style="margin-top:0;">${esc(f.description || '')}</p>
+      ${
+        f.quantitative_result
+          ? `<h4 style="font-family:var(--font-display);margin:14px 0 6px;">Quantitative Result</h4>
+             <div class="mono" style="font-size:12.5px;color:var(--accent-cyan);padding:9px 12px;background:var(--bg-surface-2);border-radius:8px;">${esc(f.quantitative_result)}</div>`
+          : ''
+      }
+      ${
+        f.implications_for_spacecraft
+          ? `<h4 style="font-family:var(--font-display);margin:14px 0 6px;">Spacecraft Fire-Safety Implications</h4>
+             <p class="text-sec" style="margin:0;">${esc(f.implications_for_spacecraft)}</p>`
+          : ''
+      }
+      ${
+        similar.length
+          ? `<h4 style="font-family:var(--font-display);margin:14px 0 6px;">Related Empirical Findings</h4>
+             <ul style="padding-left:18px;margin:0;">
+               ${similar.slice(0, 4).map((s) => `<li style="margin-bottom:5px;"><strong>${esc(s.title)}</strong> <span class="text-muted">(${esc(s.source_experiment || '')})</span></li>`).join('')}
+             </ul>`
+          : ''
+      }
+    `;
+    openModal({
+      title: f.title || findingId,
+      subtitle: `${f.source_experiment || 'NASA'} · Empirical Finding`,
+      bodyHtml: html,
+    });
+  } catch (err) {
+    console.error('Finding detail error:', err);
+  }
+}
+
 function closeModal() {
   document.getElementById('global-modal')?.classList.remove('open');
 }
@@ -142,6 +206,13 @@ function closeModal() {
 async function bootstrap() {
   // Apply saved theme immediately
   setTheme(state.theme);
+
+  // Register PWA service worker for offline shell caching
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/sw.js').catch((err) => {
+      console.warn('Service worker registration failed:', err);
+    });
+  }
 
   // Theme slider toggle
   document.getElementById('theme-toggle-btn')?.addEventListener('click', () => {

@@ -188,7 +188,7 @@ def build_engineering_guidance(params: CabinParams, res: RiskResult) -> dict[str
 
 
 def habitat_materials_matrix() -> list[dict[str, Any]]:
-    """Compute physics-backed comparative safety scores across ISS, Lunar, and Martian habitats."""
+    """Compute physics-backed comparative safety scores across ISS, Lunar, Martian, and Transit habitats."""
     materials = [
         "Teflon (PTFE)",
         "Kapton Film",
@@ -208,15 +208,23 @@ def habitat_materials_matrix() -> list[dict[str, Any]]:
         iss_res = evaluate_cabin(CabinParams(21.0, 101.3, 10.0, 0.0, mat, "N2"))
         lunar_res = evaluate_cabin(CabinParams(34.0, 56.5, 5.0, 0.16, mat, "N2"))
         mars_res = evaluate_cabin(CabinParams(26.5, 70.3, 5.0, 0.38, mat, "N2"))
+        transit_res = evaluate_cabin(CabinParams(30.0, 56.5, 10.0, 0.0, mat, "N2"))
+        avg_safety = round(
+            (iss_res.safety_score + lunar_res.safety_score + mars_res.safety_score + transit_res.safety_score) / 4.0,
+            1,
+        )
         rows.append(
             {
                 "material": mat,
                 "iss": iss_res.safety_score,
                 "lunar": lunar_res.safety_score,
                 "martian": mars_res.safety_score,
+                "transit": transit_res.safety_score,
+                "avg_safety_score": avg_safety,
                 "iss_risk": iss_res.risk_index,
                 "lunar_risk": lunar_res.risk_index,
                 "martian_risk": mars_res.risk_index,
+                "transit_risk": transit_res.risk_index,
                 "loi_iss": iss_res.estimated_loi_pct,
                 "loi_lunar": lunar_res.estimated_loi_pct,
                 "risk": lunar_res.risk_band,

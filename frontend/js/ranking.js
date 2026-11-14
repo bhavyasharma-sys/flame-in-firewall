@@ -36,13 +36,30 @@ export async function initRanking() {
 function bindSubtabs() {
   document.querySelectorAll('[data-rank-subtab]').forEach((btn) => {
     btn.addEventListener('click', () => {
-      const target = btn.dataset.rankSubtab;
-      document.querySelectorAll('[data-rank-subtab]').forEach((b) => b.classList.remove('active'));
-      btn.classList.add('active');
-      document.getElementById('rank-panel-runs').style.display = target === 'runs' ? 'block' : 'none';
-      document.getElementById('rank-panel-entities').style.display = target === 'entities' ? 'block' : 'none';
+      setRankingSubtab(btn.dataset.rankSubtab);
     });
   });
+}
+
+function setRankingSubtab(target) {
+  document.querySelectorAll('[data-rank-subtab]').forEach((b) => {
+    b.classList.toggle('active', b.dataset.rankSubtab === target);
+  });
+  const runsPanel = document.getElementById('rank-panel-runs');
+  const entPanel = document.getElementById('rank-panel-entities');
+  if (runsPanel) runsPanel.style.display = target === 'runs' ? 'block' : 'none';
+  if (entPanel) entPanel.style.display = target === 'entities' ? 'block' : 'none';
+}
+
+export async function openEntityRankingTab(tabName = 'guidelines') {
+  setRankingSubtab('entities');
+  entitySubtab = tabName;
+  document.querySelectorAll('[data-entity-tab]').forEach((b) => {
+    b.classList.toggle('active', b.dataset.entityTab === tabName);
+  });
+  const envWrap = document.getElementById('entity-env-wrap');
+  if (envWrap) envWrap.style.display = tabName === 'materials' ? 'flex' : 'none';
+  await loadEntityRanking(tabName);
 }
 
 function bindRunControls() {
@@ -89,7 +106,7 @@ export async function refreshRunRanking() {
   }
   try {
     const res = await api.rankRuns(c, weights, 50);
-    rankedRuns = res.results || [];
+    rankedRuns = (res.results || []).map((r) => ({ ...r, ...(r.record || {}) }));
     populateRunFilters(rankedRuns);
     renderRunsTable();
     if (!primaryRunId && rankedRuns.length) {
@@ -105,15 +122,19 @@ function populateRunFilters(runs) {
   const regSel = document.getElementById('run-regime-filter');
   const compSel = document.getElementById('telemetry-compare-select');
 
-  if (progSel && progSel.options.length <= 1) {
-    const progs = [...new Set(runs.map((r) => r.program))].sort();
+  if (progSel) {
+    const curProg = progSel.value || 'all';
+    const progs = [...new Set(runs.map((r) => r.program).filter(Boolean))].sort();
     progSel.innerHTML = `<option value="all">All Programs (${progs.length})</option>` +
       progs.map((p) => `<option value="${esc(p)}">${esc(p)}</option>`).join('');
+    progSel.value = progs.includes(curProg) ? curProg : 'all';
   }
-  if (regSel && regSel.options.length <= 1) {
-    const regs = [...new Set(runs.map((r) => r.combustion_regime))].sort();
-    regSel.innerHTML = `<option value="all">All Regimes</option>` +
+  if (regSel) {
+    const curReg = regSel.value || 'all';
+    const regs = [...new Set(runs.map((r) => r.combustion_regime).filter(Boolean))].sort();
+    regSel.innerHTML = `<option value="all">All Regimes (${regs.length})</option>` +
       regs.map((r) => `<option value="${esc(r)}">${esc(r)}</option>`).join('');
+    regSel.value = regs.includes(curReg) ? curReg : 'all';
   }
   if (compSel) {
     const cur = compSel.value;

@@ -2,6 +2,24 @@
  * Typed REST + SSE API client (relative URLs for seamless live-preview proxying).
  */
 
+const SESSION_STORAGE_KEY = 'fif_session_id';
+
+export function getSessionId() {
+  try {
+    let sid = sessionStorage.getItem(SESSION_STORAGE_KEY);
+    if (!sid) {
+      sid =
+        typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+          ? crypto.randomUUID()
+          : `sess-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+      sessionStorage.setItem(SESSION_STORAGE_KEY, sid);
+    }
+    return sid;
+  } catch {
+    return 'default';
+  }
+}
+
 async function jsonFetch(url, options = {}) {
   const res = await fetch(url, {
     headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
@@ -65,6 +83,7 @@ export const api = {
 
   materials: () => jsonFetch('/api/materials'),
   findings: () => jsonFetch('/api/findings'),
+  findingDetail: (id) => jsonFetch(`/api/findings/${encodeURIComponent(id)}`),
   guidelines: () => jsonFetch('/api/guidelines'),
 
   compare: (e1, e2) =>
@@ -76,12 +95,19 @@ export const api = {
   graph: () => jsonFetch('/api/graph'),
   graphNode: (nodeId) => jsonFetch(`/api/graph/node/${encodeURIComponent(nodeId)}`),
 
-  clearMemory: () => jsonFetch('/api/chat/memory', { method: 'DELETE' }),
+  clearMemory: () =>
+    jsonFetch('/api/chat/memory', {
+      method: 'DELETE',
+      headers: { 'X-Session-Id': getSessionId() },
+    }),
 
   async streamChat({ message, scenario = null }, handlers = {}) {
     const res = await fetch('/api/chat/stream', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Session-Id': getSessionId(),
+      },
       body: JSON.stringify({ message, scenario }),
     });
     if (!res.ok || !res.body) {
