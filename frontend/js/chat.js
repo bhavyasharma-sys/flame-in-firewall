@@ -168,6 +168,9 @@ export async function sendMessage(text) {
 
   let fullText = '';
   let sourcesData = [];
+  let streamOutOfScope = false;
+  let streamProvider = '';
+  let lastAuditData = null;
 
   try {
     await api.streamChat(
@@ -175,30 +178,62 @@ export async function sendMessage(text) {
       {
         sources: (data) => {
           sourcesData = data.sources || [];
+          streamOutOfScope = Boolean(data.out_of_scope);
           if (!fullText) {
-            bubble.innerHTML = `<div class="mono text-muted" style="font-size:12px;">Retrieved ${sourcesData.length} NASA evidence chunks & ${data.kg_fact_count || 0} KG links — synthesizing...</div>`;
+            const kgCount = Number.isFinite(data.kg_fact_count) ? data.kg_fact_count : 0;
+            const kgSuffix = kgCount > 0 ? ` & ${kgCount} KG links` : '';
+            bubble.innerHTML = `<div class="mono text-muted" style="font-size:12px;">Retrieved ${sourcesData.length} NASA evidence chunks${kgSuffix} — synthesizing...</div>`;
           }
         },
         chart: (data) => {
-          if (data.image_base64) {
+          if (data?.image_base64) {
+            const imgSrc = data.image_base64.startsWith('data:')
+              ? data.image_base64
+              : `data:image/png;base64,${data.image_base64}`;
             chartSlot.innerHTML = `
-              <img class="chat-chart-img" src="data:image/png;base64,${data.image_base64}" alt="Generated NASA Physics Chart" />
+              <figure style="margin:10px 0 6px;">
+                <img class="chat-chart-img" src="${imgSrc}" alt="${esc(data.title || 'Generated NASA Physics Chart')}" />
+                ${
+                  data.title || data.caption
+                    ? `<figcaption style="margin-top:6px;padding:0 2px;">
+                        ${data.title ? `<div style="font-weight:600;font-size:12.5px;color:var(--text-primary);">${esc(data.title)}</div>` : ''}
+                        ${data.caption ? `<div class="text-sec" style="font-size:11.5px;margin-top:2px;">${esc(data.caption)}</div>` : ''}
+                      </figcaption>`
+                    : ''
+                }
+              </figure>
             `;
             msgs.scrollTop = msgs.scrollHeight;
           }
         },
         token: (data) => {
-          fullText += data.text || '';
+          fullText += data.token ?? data.text ?? '';
           bubble.innerHTML = renderRichMarkdown(fullText);
           msgs.scrollTop = msgs.scrollHeight;
         },
         audit: (data) => {
-          renderAuditPanel(auditSlot, data, sourcesData);
+          lastAuditData = data || {};
+          if (typeof data?.out_of_scope === 'boolean') {
+            streamOutOfScope = data.out_of_scope;
+          }
+          if (data?.provider) {
+            streamProvider = data.provider;
+          }
+          renderAuditPanel(auditSlot, lastAuditData, sourcesData, streamOutOfScope, streamProvider);
           msgs.scrollTop = msgs.scrollHeight;
         },
         done: (data) => {
-          if (data.final_answer) {
-            bubble.innerHTML = renderRichMarkdown(data.final_answer);
+          if (data?.provider) {
+            streamProvider = data.provider;
+          }
+          if (data?.final_answer) {
+            fullText = data.final_answer;
+            bubble.innerHTML = renderRichMarkdown(fullText);
+          } else if (fullText) {
+            bubble.innerHTML = renderRichMarkdown(fullText);
+          }
+          if (lastAuditData) {
+            renderAuditPanel(auditSlot, lastAuditData, sourcesData, streamOutOfScope, streamProvider);
           }
         },
       }
@@ -212,17 +247,21 @@ export async function sendMessage(text) {
   }
 }
 
-function renderAuditPanel(slot, auditData, sources) {
-  const cit = auditData.citations || {};
-  const oos = Boolean(auditData.out_of_scope);
+function renderAuditPanel(slot, auditData, sources, fallbackOos = false, fallbackProvider = '') {
+  const cit = auditData?.citations || auditData || {};
+  const oos = Boolean(auditData?.out_of_scope ?? fallbackOos);
+  const provider = auditData?.provider || fallbackProvider || '';
   const dropped = cit.dropped_claims || [];
   const docCites = cit.verified_doc_citations || [];
   const expCites = cit.verified_exp_citations || [];
 
-  const ratioPct = Math.round((cit.verified_ratio ?? 1) * 100);
+  const ratioPct = Math.round(cit.grounding_pct ?? ((cit.verified_ratio ?? 0) * 100));
+  const total = cit.checked_sentences ?? cit.total_sentences ?? 0;
+  const cited = cit.cited_sentences ?? 0;
+
   const statusBadge = oos
     ? `<span class="badge risk-MODERATE">Out-of-Scope Safeguard Active</span>`
-    : `<span class="badge risk-LOW">Citation Audit: ${ratioPct}% Grounded (${cit.cited_sentences || 0}/${cit.total_sentences || 0} sentences)</span>`;
+    : `<span class="badge risk-LOW">Citation Audit: ${ratioPct}% Grounded (${cited}/${total} sentences)</span>`;
 
   const citeButtons = [
     ...docCites.map(
@@ -246,16 +285,21 @@ function renderAuditPanel(slot, auditData, sources) {
     `
     : '';
 
+  const providerSuffix = provider ? ` · ${esc(provider)}` : '';
   const sourcesHtml = !oos && sources.length
     ? `
       <details style="margin-top:6px;">
         <summary style="cursor:pointer;color:var(--text-secondary);">
-          Retrieved Evidence (${sources.length} hybrid chunks · ${esc(auditData.provider || '')})
+          Retrieved Evidence (${sources.length} hybrid chunks${providerSuffix})
         </summary>
         <div class="flex flex-wrap gap-2 mt-2">
           ${sources
             .slice(0, 6)
-            .map((s) => `<span class="badge">${esc(s.doc_id || s.category)}: ${esc(s.title)} (${Math.round((s.score || 0) * 100)}%)</span>`)
+            .map((s) => {
+              const label = s.doc_id || s.experiment_id || s.cite_tag || s.category || 'NASA';
+              const scoreText = Number.isFinite(s.score) ? ` (${Math.round(s.score * 100)}%)` : '';
+              return `<span class="badge">${esc(label)}: ${esc(s.title || '')}${scoreText}</span>`;
+            })
             .join('')}
         </div>
       </details>
@@ -266,7 +310,7 @@ function renderAuditPanel(slot, auditData, sources) {
     <div class="audit-panel">
       <div class="flex items-center justify-between flex-wrap gap-2">
         ${statusBadge}
-        <span class="mono text-muted" style="font-size:10.5px;">${esc(auditData.provider || '')}</span>
+        <span class="mono text-muted" style="font-size:10.5px;">${esc(provider)}</span>
       </div>
       ${citeButtons ? `<div class="flex flex-wrap gap-2 mt-2">${citeButtons}</div>` : ''}
       ${droppedHtml}

@@ -14,7 +14,7 @@ import os
 import sys
 from typing import Any, Optional
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, Header, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
@@ -35,10 +35,18 @@ from config import (
 from core.ingestion import compute_corpus_digest, load_and_chunk_data
 from core.knowledge_graph import KnowledgeGraph
 from core.llm_client import LLMClient
-from core.memory import ConversationMemory
+from core.memory import ConversationMemory, SessionMemoryStore
 from core.rag_pipeline import RAGPipeline
 from core.vectorstore import VectorStore
-from domain.combustion import canonical_material, phase_grid, ventilation_curve
+from domain.combustion import (
+    ALLOWED_CANONICAL_MATERIALS,
+    ALLOWED_DILUENTS,
+    canonical_material,
+    phase_grid,
+    validate_diluent,
+    validate_material,
+    ventilation_curve,
+)
 from domain.entity_ranker import (
     rank_experiments_explainable,
     rank_findings_explainable,
@@ -91,6 +99,7 @@ class EngineState:
 
         self.llm = LLMClient()
         self.memory = ConversationMemory()
+        self.session_memories = SessionMemoryStore(default_memory=self.memory, max_sessions=256)
         self.rag = RAGPipeline(
             vectorstore=self.vectorstore,
             knowledge_graph=self.kg,
@@ -283,6 +292,8 @@ def get_mission_summary() -> dict[str, Any]:
 def unified_search(q: str = Query(..., min_length=1, max_length=200)) -> dict[str, Any]:
     """Unified search across experiments, materials, findings, guidelines, test runs, and NASA papers."""
     needle = q.strip().lower()
+    if not needle:
+        return {"query": q, "count": 0, "results": []}
     results: list[dict[str, Any]] = []
 
     for e in engine.all_data.get("experiments", []):
@@ -373,6 +384,28 @@ def unified_search(q: str = Query(..., min_length=1, max_length=200)) -> dict[st
     return {"query": q, "count": len(results), "results": results[:40]}
 
 
+def _require_valid_material(material: str) -> str:
+    resolved = validate_material(material)
+    if resolved is None:
+        allowed = ", ".join(sorted(ALLOWED_CANONICAL_MATERIALS))
+        raise HTTPException(
+            status_code=422,
+            detail=f"Unknown material '{material}'. Allowed materials: {allowed}",
+        )
+    return resolved
+
+
+def _require_valid_diluent(diluent: str) -> str:
+    resolved = validate_diluent(diluent)
+    if resolved is None:
+        allowed = ", ".join(sorted(ALLOWED_DILUENTS))
+        raise HTTPException(
+            status_code=422,
+            detail=f"Unknown diluent '{diluent}'. Allowed diluents: {allowed}",
+        )
+    return resolved
+
+
 # ── Presets, Cabin Evaluator & Physics (EMBER + Flame in Freefall) ────────────
 @app.get("/api/presets")
 def get_presets() -> dict[str, Any]:
@@ -381,13 +414,15 @@ def get_presets() -> dict[str, Any]:
 
 @app.post("/api/evaluate-cabin")
 def api_evaluate_cabin(cfg: CabinConfigIn) -> dict[str, Any]:
+    canon_mat = _require_valid_material(cfg.fuel_material)
+    canon_dil = _require_valid_diluent(cfg.diluent_gas)
     cp = CabinParams(
         oxygen_pct=cfg.oxygen_pct,
         pressure_kpa=cfg.pressure_kpa,
         flow_velocity_cm_s=cfg.flow_velocity_cm_s,
         gravity_g=cfg.gravity_g,
-        fuel_material=canonical_material(cfg.fuel_material),
-        diluent_gas=cfg.diluent_gas,
+        fuel_material=canon_mat,
+        diluent_gas=canon_dil,
     )
     res = evaluate_cabin(cp)
     guidance = build_engineering_guidance(cp, res)
@@ -414,18 +449,23 @@ def get_phase_grid(
     flow_cm_s: float = Query(10.0, ge=0.0, le=80.0),
     diluent: str = Query("N2"),
 ) -> dict[str, Any]:
+    canon_mat = _require_valid_material(material)
+    canon_dil = _require_valid_diluent(diluent)
     return {
-        "material": canonical_material(material),
+        "material": canon_mat,
         "gravity_g": gravity_g,
         "flow_cm_s": flow_cm_s,
-        "diluent": diluent,
-        "cells": phase_grid(material, gravity_g=gravity_g, flow_cm_s=flow_cm_s, diluent=diluent),
+        "diluent": canon_dil,
+        "cells": phase_grid(canon_mat, gravity_g=gravity_g, flow_cm_s=flow_cm_s, diluent=canon_dil),
     }
 
 
 @app.post("/api/score")
 def calculate_score(req: ScoreRequest) -> dict[str, Any]:
     """Backward-compatible Habitat Fire Safety Scorer backed by exact combustion physics & Shapley."""
+    canon_mat = _require_valid_material(req.material)
+    canon_dil = _require_valid_diluent(req.diluent_gas)
+
     env_l = req.environment.lower()
     if "lunar" in env_l:
         g, default_p, default_f = 0.16, 56.5, 5.0
@@ -448,8 +488,8 @@ def calculate_score(req: ScoreRequest) -> dict[str, Any]:
         pressure_kpa=pressure,
         flow_velocity_cm_s=flow,
         gravity_g=g,
-        fuel_material=canonical_material(req.material),
-        diluent_gas=req.diluent_gas,
+        fuel_material=canon_mat,
+        diluent_gas=canon_dil,
     )
     res = evaluate_cabin(cp)
     guidance = build_engineering_guidance(cp, res)
@@ -651,8 +691,12 @@ def compare_experiments(e1: str = Query("SAFFIRE-I"), e2: str = Query("BASS-II")
         return {"flame_spread": 5.0, "extinction_time": 6.0, "soot_yield": 5.0, "heat_release": 6.0, "safety_score": 7.0}
 
     exps = engine.all_data.get("experiments", [])
-    exp1 = get_experiment_by_id(e1, exps) or {"name": e1, "acronym": e1, "category": "General"}
-    exp2 = get_experiment_by_id(e2, exps) or {"name": e2, "acronym": e2, "category": "General"}
+    exp1 = get_experiment_by_id(e1, exps)
+    if not exp1:
+        raise HTTPException(status_code=404, detail=f"Experiment '{e1}' not found")
+    exp2 = get_experiment_by_id(e2, exps)
+    if not exp2:
+        raise HTTPException(status_code=404, detail=f"Experiment '{e2}' not found")
     m1 = get_metrics(str(exp1.get("acronym") or exp1.get("name") or e1))
     m2 = get_metrics(str(exp2.get("acronym") or exp2.get("name") or e2))
     deltas = {k: round(m1[k] - m2[k], 2) for k in m1}
@@ -690,26 +734,38 @@ def get_graph_node(node_id: str) -> dict[str, Any]:
     return engine.kg.get_node_connections(node_id)
 
 
-# ── FlameAI Chat (Sync + SSE Stream + Memory) ─────────────────────────────────
+# ── FlameAI Chat (Sync + SSE Stream + Per-Session Memory) ─────────────────────
 @app.post("/api/chat")
-def chat(req: ChatRequest) -> dict[str, Any]:
+def chat(
+    req: ChatRequest,
+    x_session_id: Optional[str] = Header(default=None, alias="X-Session-Id"),
+) -> dict[str, Any]:
     if not req.message.strip():
         raise HTTPException(status_code=400, detail="Empty message")
     scenario = req.scenario.model_dump() if req.scenario else None
-    result = engine.rag.query(req.message.strip(), top_k=TOP_K_RESULTS, scenario=scenario)
+    mem = engine.session_memories.get(x_session_id)
+    result = engine.rag.query(
+        req.message.strip(), top_k=TOP_K_RESULTS, scenario=scenario, memory_override=mem
+    )
     result["answer"] = clean_markdown_text(str(result.get("answer") or ""))
-    result["history"] = engine.memory.get_full_history()[-10:]
+    result["history"] = mem.get_full_history()[-10:]
     return result
 
 
 @app.post("/api/chat/stream")
-def chat_stream(req: ChatRequest) -> StreamingResponse:
+def chat_stream(
+    req: ChatRequest,
+    x_session_id: Optional[str] = Header(default=None, alias="X-Session-Id"),
+) -> StreamingResponse:
     if not req.message.strip():
         raise HTTPException(status_code=400, detail="Empty message")
     scenario = req.scenario.model_dump() if req.scenario else None
+    mem = engine.session_memories.get(x_session_id)
 
     def event_generator():
-        for evt in engine.rag.stream_query(req.message.strip(), top_k=TOP_K_RESULTS, scenario=scenario):
+        for evt in engine.rag.stream_query(
+            req.message.strip(), top_k=TOP_K_RESULTS, scenario=scenario, memory_override=mem
+        ):
             event_name = evt["event"]
             payload = json.dumps(evt["data"], ensure_ascii=False)
             yield f"event: {event_name}\ndata: {payload}\n\n"
@@ -726,14 +782,16 @@ def chat_stream(req: ChatRequest) -> StreamingResponse:
 
 
 @app.delete("/api/chat/memory")
-def clear_memory() -> dict[str, str]:
-    engine.memory.clear()
+def clear_memory(
+    x_session_id: Optional[str] = Header(default=None, alias="X-Session-Id"),
+) -> dict[str, str]:
+    engine.session_memories.clear(x_session_id)
     return {"message": "Conversation memory cleared"}
 
 
 # ── Static Frontend & NASA PDF Papers ─────────────────────────────────────────
 if os.path.isdir(FRONTEND_DIR):
-    for sub in ("css", "js", "papers"):
+    for sub in ("css", "js", "papers", "icons"):
         sub_dir = os.path.join(FRONTEND_DIR, sub)
         if os.path.isdir(sub_dir):
             app.mount(f"/{sub}", StaticFiles(directory=sub_dir), name=sub)
@@ -749,6 +807,13 @@ if os.path.isdir(FRONTEND_DIR):
     @app.get("/sw.js")
     def serve_sw():
         return FileResponse(os.path.join(FRONTEND_DIR, "sw.js"))
+
+    @app.get("/favicon.ico")
+    def serve_favicon():
+        svg_path = os.path.join(FRONTEND_DIR, "icons", "icon.svg")
+        if os.path.exists(svg_path):
+            return FileResponse(svg_path, media_type="image/svg+xml")
+        raise HTTPException(status_code=404, detail="Favicon not found")
 
 
 if __name__ == "__main__":

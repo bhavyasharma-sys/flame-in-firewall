@@ -24,6 +24,11 @@ const MATERIALS = [
   'Velcro Strips',
   'Kapton Film',
   'Teflon (PTFE)',
+  'Kevlar',
+  'Cellulose (Paper)',
+  'Foam Insulation (Polyurethane)',
+  'Electrical Wire Insulation (Cross-linked ETFE)',
+  'Polycarbonate',
 ];
 
 const DILUENTS = ['N2', 'CO2', 'He', 'Ar'];
@@ -48,9 +53,33 @@ export async function initCabin() {
     scheduleEvaluate();
   });
 
+  on('tab:changed', (tab) => {
+    if (tab === 'cabin') {
+      requestAnimationFrame(() => {
+        if (phaseCells.length) drawPhaseGrid();
+        if (state.activeCabinEval) renderShapleyChart(state.activeCabinEval);
+      });
+    }
+  });
+
   on('theme:changed', () => {
     if (state.activeCabinEval) renderShapleyChart(state.activeCabinEval);
     if (phaseCells.length) drawPhaseGrid();
+  });
+
+  const phaseWrap = document.getElementById('phase-grid-canvas')?.parentElement;
+  if (phaseWrap && typeof ResizeObserver !== 'undefined') {
+    const ro = new ResizeObserver(() => {
+      if (state.activeTab === 'cabin' && phaseCells.length) {
+        drawPhaseGrid();
+      }
+    });
+    ro.observe(phaseWrap);
+  }
+  window.addEventListener('resize', () => {
+    if (state.activeTab === 'cabin' && phaseCells.length) {
+      drawPhaseGrid();
+    }
   });
 }
 
@@ -177,7 +206,15 @@ function syncControlsFromState() {
   setPair('cabin-gravity', c.gravity_g, ' g');
 
   const matSel = document.getElementById('cabin-material');
-  if (matSel) matSel.value = c.fuel_material;
+  if (matSel) {
+    if (![...matSel.options].some((o) => o.value === c.fuel_material) && c.fuel_material) {
+      const opt = document.createElement('option');
+      opt.value = c.fuel_material;
+      opt.textContent = c.fuel_material;
+      matSel.appendChild(opt);
+    }
+    matSel.value = c.fuel_material;
+  }
   const dilSel = document.getElementById('cabin-diluent');
   if (dilSel) dilSel.value = c.diluent_gas;
 }
@@ -233,7 +270,8 @@ function renderRiskMetrics(r) {
   setText('cabin-loi', `${r.estimated_loi_pct.toFixed(1)}%`);
   setText('cabin-margin', `${r.oxygen_margin_pct > 0 ? '+' : ''}${r.oxygen_margin_pct.toFixed(1)}%`);
   setText('cabin-regime', r.predicted_regime);
-  setText('cabin-veff', `${r.effective_velocity_cm_s} cm/s`);
+  const vEff = r.u_eff_cm_s ?? r.effective_velocity_cm_s;
+  setText('cabin-veff', Number.isFinite(vEff) ? `${vEff} cm/s` : '—');
 
   const sumVal = (r.contributions || []).reduce((acc, x) => acc + x.value, 0);
   const delta = r.risk_index - r.baseline_risk;
@@ -393,16 +431,27 @@ function renderGuidance(r) {
   }
   if (recsEl) {
     recsEl.innerHTML = (r.recommendation_items || [])
-      .map(
-        (item) => `
-        <div style="padding:9px 11px;background:var(--bg-surface-2);border-left:3px solid var(--accent-flame);border-radius:8px;font-size:12.5px;margin-bottom:8px;">
-          <div>${esc(item.text)}</div>
-          <div class="mt-2">
-            <button type="button" class="cite-chip" data-doc-id="${esc(item.doc_id)}" data-doc-page="${esc(item.page)}">${esc(item.citation)}</button>
+      .map((item) => {
+        if (typeof item === 'string') {
+          return `
+            <div style="padding:9px 11px;background:var(--bg-surface-2);border-left:3px solid var(--accent-flame);border-radius:8px;font-size:12.5px;margin-bottom:8px;">
+              <div>${esc(item)}</div>
+            </div>
+          `;
+        }
+        return `
+          <div style="padding:9px 11px;background:var(--bg-surface-2);border-left:3px solid var(--accent-flame);border-radius:8px;font-size:12.5px;margin-bottom:8px;">
+            <div>${esc(item.text || '')}</div>
+            ${
+              item.doc_id
+                ? `<div class="mt-2">
+                    <button type="button" class="cite-chip" data-doc-id="${esc(item.doc_id)}" data-doc-page="${esc(item.page || 1)}">${esc(item.citation || item.doc_id)}</button>
+                  </div>`
+                : ''
+            }
           </div>
-        </div>
-      `
-      )
+        `;
+      })
       .join('');
   }
 }
@@ -411,6 +460,7 @@ function renderHabitatMatrix(rows) {
   const tbody = document.getElementById('cabin-matrix-tbody');
   if (!tbody) return;
   const scoreBadge = (val) => {
+    if (!Number.isFinite(val)) return `<span class="badge">—</span>`;
     const band = val < 30 ? 'CRITICAL' : val < 55 ? 'HIGH' : val < 78 ? 'MODERATE' : 'LOW';
     return `<span class="badge risk-${band}">${val.toFixed(0)}</span>`;
   };
@@ -419,12 +469,12 @@ function renderHabitatMatrix(rows) {
       (r) => `
       <tr style="cursor:pointer;" data-select-mat="${esc(r.material)}">
         <td style="font-weight:600;">${esc(r.material)}</td>
-        <td class="mono">${r.base_loi_pct}%</td>
-        <td>${scoreBadge(r.iss_21)}</td>
-        <td>${scoreBadge(r.lunar_34)}</td>
-        <td>${scoreBadge(r.mars_34)}</td>
-        <td>${scoreBadge(r.transit_30)}</td>
-        <td class="mono" style="font-weight:700;">${r.avg_safety_score}</td>
+        <td class="mono">${Number.isFinite(r.loi_iss) ? `${r.loi_iss.toFixed(1)}%` : '—'}</td>
+        <td>${scoreBadge(r.iss)}</td>
+        <td>${scoreBadge(r.lunar)}</td>
+        <td>${scoreBadge(r.martian)}</td>
+        <td>${scoreBadge(r.transit)}</td>
+        <td class="mono" style="font-weight:700;">${Number.isFinite(r.avg_safety_score) ? r.avg_safety_score.toFixed(1) : '—'}</td>
       </tr>
     `
     )

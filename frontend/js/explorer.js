@@ -119,11 +119,12 @@ function renderExperimentCards(exps) {
   });
 }
 
-async function openExperimentModal(expId) {
+export async function openExperimentModal(expId) {
   try {
     const data = await api.experimentDetail(expId);
     const e = data.experiment;
     const links = data.graph_links || {};
+    const outbound = links.outbound ?? links.outgoing ?? [];
     const html = `
       <div class="flex flex-wrap gap-2 mb-3">
         <span class="badge badge-flame">${esc(e.acronym || e.id)}</span>
@@ -145,9 +146,9 @@ async function openExperimentModal(expId) {
         ${(e.safety_implications || []).map((s) => `<li style="margin-bottom:5px;">${esc(s)}</li>`).join('')}
       </ul>
       ${
-        (links.outgoing || []).length
-          ? `<h4 style="font-family:var(--font-display);margin:14px 0 6px;">Knowledge Graph Connections (${links.outgoing.length})</h4>
-             <div class="flex flex-wrap gap-2">${links.outgoing.slice(0, 12).map((o) => `<span class="badge">${esc(o.relation)} → ${esc(o.target)}</span>`).join('')}</div>`
+        outbound.length
+          ? `<h4 style="font-family:var(--font-display);margin:14px 0 6px;">Knowledge Graph Connections (${outbound.length})</h4>
+             <div class="flex flex-wrap gap-2">${outbound.slice(0, 12).map((o) => `<span class="badge">${esc(o.relationship ?? o.relation ?? 'related')} → ${esc(o.target)}</span>`).join('')}</div>`
           : ''
       }
     `;
