@@ -1,0 +1,27 @@
+---
+doc_id: ISS-ACME
+title: "ISS Investigation: Advanced Combustion via Microgravity Experiments (ACME)"
+source_type: iss_page
+investigation: ACME
+proxy: true
+url: "/papers/nasa_glenn_acme.pdf"
+sources:
+  - "/papers/nasa_glenn_acme.pdf"
+  - "/papers/nasa_glenn_slice.pdf"
+  - "/papers/nasa_glenn_spice.pdf"
+  - "/papers/iss_researchers_guide_combustion_science.pdf"
+  - "https://psi.nasa.gov/physci/repo/search?q=ACME"
+  - "https://www.nasa.gov/glenn/glenn-expertise-space-exploration/physical-sciences-program/combustion-science/"
+---
+<!-- page: 1 -->
+# Advanced Combustion via Microgravity Experiments (ACME)
+
+> PROXY ISS investigation summary page (EMBER team).
+
+**Facility:** Combustion Integrated Rack (CIR), ACME chamber insert.
+**Objective:** Study non-premixed gaseous flames (spherical burner, coflow, flame design,
+electric-field effects) to improve combustion efficiency, reduce soot, and understand
+extinction limits.
+**Conditions:** 0g; 18-30 % O2; 60-101.3 kPa; low or zero coflow.
+**Space benefit:** Fire detection (soot and particle signatures) and radiation hazards from large,
+slowly growing microgravity flames.
