@@ -8,10 +8,13 @@ Unified NASA Space Apps 2026 Fire Safety Intelligence Platform combining:
 
 from __future__ import annotations
 
+import asyncio
+from contextlib import asynccontextmanager
 import json
 import logging
 import os
 import sys
+import threading
 from typing import Any, Optional
 
 from fastapi import FastAPI, Header, HTTPException, Query
@@ -30,12 +33,15 @@ from config import (
     CORS_ORIGINS,
     FRONTEND_DIR,
     MAX_CHAT_MESSAGE_CHARS,
+    NASA_LIVE_SYNC_ENABLED,
+    NASA_SYNC_ON_STARTUP,
     TOP_K_RESULTS,
 )
 from core.ingestion import compute_corpus_digest, load_and_chunk_data
 from core.knowledge_graph import KnowledgeGraph
 from core.llm_client import LLMClient
 from core.memory import ConversationMemory, SessionMemoryStore
+from core.nasa_live_sync import NasaLiveSyncManager
 from core.rag_pipeline import RAGPipeline
 from core.vectorstore import VectorStore
 from domain.combustion import (
@@ -70,7 +76,40 @@ from utils.helpers import clean_markdown_text, color_for_risk, find_similar_find
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(name)s] %(levelname)s: %(message)s")
 logger = logging.getLogger("FlameServer")
 
-app = FastAPI(title=APP_TITLE, version=APP_VERSION)
+
+async def _nasa_sync_scheduler() -> None:
+    """Periodic background loop polling official NASA websites for RAG updates."""
+    try:
+        if NASA_SYNC_ON_STARTUP:
+            await asyncio.sleep(2.0)
+            await asyncio.to_thread(engine.live_sync.sync_all, force=False)
+        while True:
+            await asyncio.sleep(engine.live_sync.interval_seconds)
+            if engine.live_sync.enabled:
+                await asyncio.to_thread(engine.live_sync.sync_all, force=False)
+    except asyncio.CancelledError:
+        logger.info("NASA live sync scheduler stopped cleanly.")
+    except Exception as exc:
+        logger.warning("NASA live sync scheduler encountered an error: %s", exc)
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    task: Optional[asyncio.Task] = None
+    if engine.live_sync.enabled:
+        task = asyncio.create_task(_nasa_sync_scheduler(), name="nasa-live-sync-scheduler")
+    try:
+        yield
+    finally:
+        if task is not None:
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+
+
+app = FastAPI(title=APP_TITLE, version=APP_VERSION, lifespan=lifespan)
 
 allow_all = "*" in CORS_ORIGINS
 app.add_middleware(
@@ -82,10 +121,34 @@ app.add_middleware(
 )
 
 
+@app.middleware("http")
+async def no_stale_app_shell_cache(request, call_next):
+    response = await call_next(request)
+    path = request.url.path
+    if path in ("/", "/sw.js", "/manifest.json") or (
+        (path.startswith("/js/") and not path.startswith("/js/vendor/"))
+        or path.startswith("/css/")
+    ):
+        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    return response
+
+
 # ── Singleton Core Engine ─────────────────────────────────────────────────────
 class EngineState:
     def __init__(self) -> None:
+        self._rebuild_lock = threading.RLock()
         self.all_data = load_all_data()
+        self._base_documents = list(self.all_data.get("documents") or [])
+
+        # Initialize Live NASA Sync Manager and merge any previously cached live NASA docs
+        self.live_sync = NasaLiveSyncManager(
+            enabled=NASA_LIVE_SYNC_ENABLED,
+            on_corpus_updated=self.apply_live_documents,
+        )
+        initial_live_docs = self.live_sync.get_live_documents()
+        if initial_live_docs:
+            self.all_data["documents"] = list(self._base_documents) + initial_live_docs
+
         self.kg = KnowledgeGraph()
         self.kg.build_from_all_data(self.all_data)
 
@@ -114,24 +177,46 @@ class EngineState:
             str(r["experiment_id"]).upper(): r for r in (self.all_data.get("test_runs") or [])
         }
 
+    def apply_live_documents(self, live_docs: list[dict[str, Any]]) -> dict[str, Any]:
+        """Atomically merge updated live NASA website docs into RAG VectorStore & citation index."""
+        with self._rebuild_lock:
+            combined_docs = list(self._base_documents) + list(live_docs)
+            chunks = load_and_chunk_data(
+                documents=combined_docs,
+                test_runs=self.all_data.get("test_runs"),
+            )
+            digest = compute_corpus_digest(chunks)
+            self.vectorstore.build_index(chunks, digest=digest)
+
+            self.all_data["documents"] = combined_docs
+            self.docs_by_id = {str(d["doc_id"]).upper(): d for d in combined_docs}
+            self.rag.refresh_valid_citations(self.all_data)
+
+            return {
+                "corpus_digest": digest,
+                "document_count": len(combined_docs),
+                "live_document_count": len(live_docs),
+                "chunk_count": len(chunks),
+            }
+
 
 engine = EngineState()
 
 
 # ── Pydantic Schemas ──────────────────────────────────────────────────────────
 class CabinConfigIn(BaseModel):
-    oxygen_pct: float = Field(21.0, ge=10.0, le=100.0)
-    pressure_kpa: float = Field(101.3, ge=15.0, le=150.0)
-    flow_velocity_cm_s: float = Field(10.0, ge=0.0, le=80.0)
-    gravity_g: float = Field(0.0, ge=0.0, le=3.0)
+    oxygen_pct: float = Field(21.0, ge=0.0, allow_inf_nan=False)
+    pressure_kpa: float = Field(101.3, ge=0.0, allow_inf_nan=False)
+    flow_velocity_cm_s: float = Field(10.0, ge=0.0, allow_inf_nan=False)
+    gravity_g: float = Field(0.0, ge=0.0, allow_inf_nan=False)
     fuel_material: str = Field("Cotton-Fiberglass", min_length=1, max_length=120)
     diluent_gas: str = Field("N2", min_length=1, max_length=16)
 
 
 class RankWeightsIn(BaseModel):
-    similarity: float = Field(0.5, ge=0.0, le=1.0)
-    completeness: float = Field(0.2, ge=0.0, le=1.0)
-    criticality: float = Field(0.3, ge=0.0, le=1.0)
+    similarity: float = Field(0.5, ge=0.0, allow_inf_nan=False)
+    completeness: float = Field(0.2, ge=0.0, allow_inf_nan=False)
+    criticality: float = Field(0.3, ge=0.0, allow_inf_nan=False)
 
 
 class RankRunsRequest(BaseModel):
@@ -152,6 +237,19 @@ class ScoreRequest(BaseModel):
 class ChatRequest(BaseModel):
     message: str = Field(..., min_length=1, max_length=MAX_CHAT_MESSAGE_CHARS)
     scenario: Optional[CabinConfigIn] = None
+
+
+class LiveSyncRequest(BaseModel):
+    force: bool = False
+    doc_id: Optional[str] = Field(default=None, max_length=32)
+
+
+class AddLiveSourceRequest(BaseModel):
+    url: str = Field(..., min_length=10, max_length=600)
+    title: Optional[str] = Field(default=None, max_length=180)
+    investigation: Optional[str] = Field(default=None, max_length=120)
+    kind: str = Field(default="html", pattern="^(html|ntrs_api)$")
+    sync_now: bool = True
 
 
 # ── Health, Stats & Overview ──────────────────────────────────────────────────
@@ -176,6 +274,15 @@ def health() -> dict[str, Any]:
         },
         "graph": kg_stats,
         "vectorstore": engine.vectorstore.get_collection_stats(),
+        "live_nasa_sync": {
+            "enabled": engine.live_sync.enabled,
+            "syncing": engine.live_sync.get_status()["syncing"],
+            "interval_seconds": engine.live_sync.interval_seconds,
+            "last_run_at": engine.live_sync.get_status()["last_run_at"],
+            "last_update_at": engine.live_sync.get_status()["last_update_at"],
+            "live_documents_active": engine.live_sync.get_status()["live_documents_active"],
+            "total_watched_sources": engine.live_sync.get_status()["total_watched_sources"],
+        },
     }
 
 
@@ -223,6 +330,9 @@ def get_stats() -> dict[str, Any]:
         "run_regimes": run_regimes,
         "ai_configured": engine.llm.is_configured,
         "ai_engine": engine.llm.display_label,
+        "live_nasa_sources": engine.live_sync.get_status()["total_watched_sources"],
+        "live_nasa_active_docs": engine.live_sync.get_status()["live_documents_active"],
+        "last_nasa_sync_at": engine.live_sync.get_status()["last_run_at"],
     }
 
 
@@ -734,6 +844,83 @@ def get_graph_node(node_id: str) -> dict[str, Any]:
     return engine.kg.get_node_connections(node_id)
 
 
+# ── Live NASA Website Sync -> Auto-Updating RAG Pipeline ──────────────────────
+@app.get("/api/sync/status")
+def get_live_sync_status() -> dict[str, Any]:
+    st = engine.live_sync.get_status()
+    vs = engine.vectorstore.get_collection_stats()
+    return {
+        **st,
+        "corpus_digest": vs.get("corpus_digest"),
+        "total_chunks": vs.get("document_count", 0),
+        "total_documents": len(engine.all_data.get("documents", [])),
+    }
+
+
+@app.post("/api/sync/nasa")
+async def trigger_live_nasa_sync(req: Optional[LiveSyncRequest] = None) -> dict[str, Any]:
+    body = req or LiveSyncRequest()
+    before_vs = engine.vectorstore.get_collection_stats()
+    try:
+        report = await asyncio.to_thread(
+            engine.live_sync.sync_all, force=body.force, doc_id=body.doc_id
+        )
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    after_vs = engine.vectorstore.get_collection_stats()
+    return {
+        **report,
+        "corpus_digest_before": before_vs.get("corpus_digest"),
+        "corpus_digest_after": after_vs.get("corpus_digest"),
+        "total_chunks": after_vs.get("document_count", 0),
+        "total_documents": len(engine.all_data.get("documents", [])),
+    }
+
+
+@app.post("/api/sync/sources")
+async def add_live_nasa_source(req: AddLiveSourceRequest) -> dict[str, Any]:
+    try:
+        src = engine.live_sync.add_source(
+            req.url,
+            title=req.title,
+            investigation=req.investigation,
+            kind=req.kind,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    sync_report = None
+    if req.sync_now:
+        sync_report = await asyncio.to_thread(
+            engine.live_sync.sync_all, force=True, doc_id=src["doc_id"]
+        )
+    vs = engine.vectorstore.get_collection_stats()
+    return {
+        "source": src,
+        "sync": sync_report,
+        "corpus_digest": vs.get("corpus_digest"),
+        "total_chunks": vs.get("document_count", 0),
+        "status": engine.live_sync.get_status(),
+    }
+
+
+@app.delete("/api/sync/sources/{doc_id}")
+def delete_live_nasa_source(doc_id: str) -> dict[str, Any]:
+    try:
+        removed = engine.live_sync.remove_source(doc_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if not removed:
+        raise HTTPException(status_code=404, detail=f"Live NASA source '{doc_id}' not found")
+    vs = engine.vectorstore.get_collection_stats()
+    return {
+        "deleted": doc_id.upper(),
+        "corpus_digest": vs.get("corpus_digest"),
+        "total_chunks": vs.get("document_count", 0),
+        "status": engine.live_sync.get_status(),
+    }
+
+
 # ── FlameAI Chat (Sync + SSE Stream + Per-Session Memory) ─────────────────────
 @app.post("/api/chat")
 def chat(
@@ -742,6 +929,7 @@ def chat(
 ) -> dict[str, Any]:
     if not req.message.strip():
         raise HTTPException(status_code=400, detail="Empty message")
+    engine.live_sync.maybe_trigger_background_sync()
     scenario = req.scenario.model_dump() if req.scenario else None
     mem = engine.session_memories.get(x_session_id)
     result = engine.rag.query(
@@ -759,6 +947,7 @@ def chat_stream(
 ) -> StreamingResponse:
     if not req.message.strip():
         raise HTTPException(status_code=400, detail="Empty message")
+    engine.live_sync.maybe_trigger_background_sync()
     scenario = req.scenario.model_dump() if req.scenario else None
     mem = engine.session_memories.get(x_session_id)
 
@@ -804,7 +993,7 @@ if os.path.isdir(FRONTEND_DIR):
     def serve_manifest():
         return FileResponse(os.path.join(FRONTEND_DIR, "manifest.json"))
 
-    @app.get("/sw.js")
+    @app.api_route("/sw.js", methods=["GET", "HEAD"])
     def serve_sw():
         return FileResponse(os.path.join(FRONTEND_DIR, "sw.js"))
 

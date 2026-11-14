@@ -92,6 +92,20 @@ export const api = {
   documents: () => jsonFetch('/api/documents'),
   documentDetail: (docId) => jsonFetch(`/api/documents/${encodeURIComponent(docId)}`),
 
+  syncStatus: () => jsonFetch('/api/sync/status'),
+  syncNasaNow: ({ force = false, doc_id = null } = {}) =>
+    jsonFetch('/api/sync/nasa', {
+      method: 'POST',
+      body: JSON.stringify({ force, doc_id }),
+    }),
+  addSyncSource: ({ url, title = null, investigation = null, kind = 'html', sync_now = true }) =>
+    jsonFetch('/api/sync/sources', {
+      method: 'POST',
+      body: JSON.stringify({ url, title, investigation, kind, sync_now }),
+    }),
+  removeSyncSource: (docId) =>
+    jsonFetch(`/api/sync/sources/${encodeURIComponent(docId)}`, { method: 'DELETE' }),
+
   graph: () => jsonFetch('/api/graph'),
   graphNode: (nodeId) => jsonFetch(`/api/graph/node/${encodeURIComponent(nodeId)}`),
 

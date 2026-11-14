@@ -50,6 +50,7 @@ uniform vec3 uGeomScale;
 uniform vec2 uWind;
 uniform float uFlowDirX;
 uniform int uSteps;
+uniform float uLightMode;
 
 // Interleaved Gradient Noise (Jimenez 2014) for artifact-free ray dithering
 float ign(vec2 p) {
@@ -75,39 +76,49 @@ void fbmDetail(vec3 p, out float fbmVal, out float ridgeVal) {
 vec3 evalBackground(vec2 screenPos, float aspect) {
   vec2 uv = screenPos * 0.5;
   float vig = max(0.22, 1.0 - 0.32 * dot(uv, uv));
-  vec3 bg = vec3(0.016, 0.025, 0.048) * vig;
+
+  vec3 darkBg = vec3(0.016, 0.025, 0.048) * vig;
+  vec3 lightBg = mix(vec3(0.87, 0.905, 0.955), vec3(0.96, 0.975, 0.992), clamp(vig, 0.0, 1.0));
+  vec3 bg = mix(darkBg, lightBg, uLightMode);
 
   // Cheap anti-aliased chamber reticle grid (zero fwidth() dependency)
   vec2 gp = abs(fract(uv * 5.0 - 0.5) - 0.5);
   float lineW = 3.2 / max(240.0, min(uRes.x, uRes.y));
   float gx = smoothstep(lineW, 0.0, gp.x);
   float gy = smoothstep(lineW, 0.0, gp.y);
-  bg += vec3(0.032, 0.072, 0.115) * max(gx, gy) * 0.20;
+  float gridMask = max(gx, gy);
+  bg = mix(
+    bg + vec3(0.032, 0.072, 0.115) * gridMask * 0.20,
+    bg - vec3(0.085, 0.095, 0.115) * gridMask * 0.42,
+    uLightMode
+  );
 
   // Physical fuel holder silhouette matched to fuel mode
   if (uFuelMode < 0.5) {
     // FLEX droplet on thin SiC fiber
     float d = length(uv - vec2(0.0, -0.02));
     if (d < 0.044) {
-      bg = mix(bg, vec3(0.28, 0.21, 0.15), smoothstep(0.044, 0.028, d));
+      vec3 dropCol = mix(vec3(0.28, 0.21, 0.15), vec3(0.32, 0.24, 0.18), uLightMode);
+      bg = mix(bg, dropCol, smoothstep(0.044, 0.028, d));
     }
     float fiber = smoothstep(0.005, 0.001, abs(uv.y + 0.02)) * smoothstep(0.48, 0.05, abs(uv.x));
-    bg += vec3(0.16, 0.20, 0.26) * fiber * 0.48;
+    bg = mix(bg + vec3(0.16, 0.20, 0.26) * fiber * 0.48, mix(bg, vec3(0.35, 0.42, 0.52), fiber * 0.65), uLightMode);
   } else if (uFuelMode < 1.5) {
     // ACME gas burner nozzle positioned cleanly beneath the flame base
     float nozzleTop = mix(-0.18, -0.34, uShapeBf);
     if (abs(uv.x) < 0.055 && uv.y < nozzleTop && uv.y > -0.58) {
-      bg = vec3(0.15, 0.19, 0.26) * (0.68 + 0.32 * (1.0 - abs(uv.x) / 0.055));
+      float shade = 0.68 + 0.32 * (1.0 - abs(uv.x) / 0.055);
+      bg = mix(vec3(0.15, 0.19, 0.26), vec3(0.28, 0.35, 0.44), uLightMode) * shade;
     }
   } else if (uFuelMode < 2.5) {
     // BASS-II PMMA rod
     if (abs(uv.x) < 0.032 && uv.y < -0.10 && uv.y > -0.56) {
-      bg = vec3(0.24, 0.32, 0.40) * 0.65;
+      bg = mix(vec3(0.24, 0.32, 0.40) * 0.65, vec3(0.30, 0.38, 0.48), uLightMode);
     }
   } else {
     // SAFFIRE flat sheet sample frame
     if (abs(uv.x) < 0.25 && uv.y < -0.23 && uv.y > -0.27) {
-      bg = vec3(0.24, 0.26, 0.30);
+      bg = mix(vec3(0.24, 0.26, 0.30), vec3(0.34, 0.40, 0.48), uLightMode);
     }
   }
 
@@ -124,7 +135,13 @@ void main() {
   float haloDist = length(vec2(nxScreen - uWind.x * 0.35, nyScreen + 0.22 * uShapeBf));
   vec3 haloCol = mix(vec3(0.06, 0.40, 0.92), vec3(0.95, 0.42, 0.10), uSootDom);
   haloCol = mix(haloCol, vec3(0.20, 0.32, 0.95), uCool);
-  vec3 halo = haloCol * exp(-haloDist * 2.4) * 0.16 * clamp(uVitality, 0.0, 1.0);
+  float haloStrength = exp(-haloDist * 2.4) * clamp(uVitality, 0.0, 1.0);
+  vec3 halo = haloCol * haloStrength * 0.16;
+  vec3 bgWithHalo = mix(
+    bg + halo,
+    mix(bg, haloCol * 0.85, haloStrength * 0.16),
+    uLightMode
+  );
 
   if (uVitality <= 0.01 && uIgnite <= 0.01) {
     fragColor = vec4(bg, 1.0);
@@ -140,9 +157,10 @@ void main() {
 
   // Early vertical rejection: 0 raymarch steps outside vertical envelope
   if (lyRaw < minLy || lyRaw > maxLy || uVitality <= 0.01) {
-    vec3 outCol = bg + halo;
+    vec3 outCol = bgWithHalo;
     if (uIgnite > 0.01) {
-      outCol += vec3(0.55, 0.84, 1.0) * exp(-length(vec2(nxScreen, nyScreen)) * 4.5) * uIgnite * 0.9;
+      float sp = exp(-length(vec2(nxScreen, nyScreen)) * 4.5) * uIgnite * 0.9;
+      outCol = mix(outCol + vec3(0.55, 0.84, 1.0) * sp, mix(outCol, vec3(0.02, 0.52, 0.95), clamp(sp, 0.0, 1.0)), uLightMode);
     }
     fragColor = vec4(clamp(outCol, 0.0, 1.0), 1.0);
     return;
@@ -163,9 +181,10 @@ void main() {
   // Early horizontal + exact Z-chord rejection
   float zHalfSq = maxR * maxR - lxCenter * lxCenter;
   if (zHalfSq <= 0.0) {
-    vec3 outCol = bg + halo;
+    vec3 outCol = bgWithHalo;
     if (uIgnite > 0.01) {
-      outCol += vec3(0.55, 0.84, 1.0) * exp(-length(vec2(nxScreen, nyScreen)) * 4.5) * uIgnite * 0.9;
+      float sp = exp(-length(vec2(nxScreen, nyScreen)) * 4.5) * uIgnite * 0.9;
+      outCol = mix(outCol + vec3(0.55, 0.84, 1.0) * sp, mix(outCol, vec3(0.02, 0.52, 0.95), clamp(sp, 0.0, 1.0)), uLightMode);
     }
     fragColor = vec4(clamp(outCol, 0.0, 1.0), 1.0);
     return;
@@ -332,12 +351,26 @@ void main() {
   flameCol *= vec3(0.996, 0.885, 0.985);
 
   // Ignition spark flash ring
+  float sparkStrength = 0.0;
   vec3 spark = vec3(0.0);
   if (uIgnite > 0.01) {
-    spark = vec3(0.62, 0.88, 1.0) * exp(-length(vec2(nxScreen, nyScreen)) * 4.8) * uIgnite * 1.15;
+    sparkStrength = exp(-length(vec2(nxScreen, nyScreen)) * 4.8) * uIgnite * 1.15;
+    spark = vec3(0.62, 0.88, 1.0) * sparkStrength;
   }
 
-  vec3 finalCol = bg * transmittance + flameCol + halo * (0.4 + 0.6 * transmittance) + spark;
+  vec3 darkFinal = bg * transmittance + flameCol + halo * (0.4 + 0.6 * transmittance) + spark;
+
+  // Light-mode alpha-over composite with enhanced chroma so the flame pops sharply on paper-white lab backdrop
+  float flameLum = max(flameCol.r, max(flameCol.g, flameCol.b));
+  float flameAlpha = clamp(max(1.0 - transmittance, flameLum * 1.22), 0.0, 1.0);
+  vec3 vividFlame = clamp(pow(max(flameCol, vec3(0.0)), vec3(0.92)) * vec3(1.04, 0.90, 1.08), 0.0, 1.0);
+  vec3 lightBase = mix(bg, haloCol * 0.80, haloStrength * 0.18 * (0.35 + 0.65 * transmittance));
+  vec3 lightFinal = mix(lightBase, vividFlame, flameAlpha);
+  if (sparkStrength > 0.005) {
+    lightFinal = mix(lightFinal, vec3(0.02, 0.54, 0.96), clamp(sparkStrength * 0.75, 0.0, 1.0));
+  }
+
+  vec3 finalCol = mix(darkFinal, lightFinal, uLightMode);
   fragColor = vec4(clamp(finalCol, 0.0, 1.0), 1.0);
 }
 `;
@@ -456,6 +489,7 @@ export class FlameRenderer {
     this.fps = 60;
     this.lastStatsEmit = 0;
     this.sprites2d = null;
+    this.lightMode = false;
 
     this.state = {
       buoyancy: 0.0,
@@ -567,6 +601,7 @@ export class FlameRenderer {
         'uWind',
         'uFlowDirX',
         'uSteps',
+        'uLightMode',
       ];
       for (const n of names) {
         this.uniforms[n] = gl.getUniformLocation(prog, n);
@@ -719,7 +754,15 @@ export class FlameRenderer {
   }
 
   setSpeed(speed) {
-    this.speed = Math.max(0.1, Math.min(3.0, Number(speed) || 1.0));
+    const n = Number(speed);
+    this.speed = Number.isFinite(n) && n >= 0 ? n : 1.0;
+  }
+
+  setTheme(theme) {
+    this.lightMode = theme === 'light';
+    if (this.paused) {
+      this.renderFrame();
+    }
   }
 
   setPaused(paused) {
@@ -769,7 +812,7 @@ export class FlameRenderer {
 
       const rawDt = Math.max(0.001, rawDtMs / 1000);
       const dt = Math.min(0.05, rawDt);
-      this.time += dt * this.speed;
+      this.time += dt * this.speed * (this.state.timeBoost ?? 1.0);
       if (this.ignite > 0) this.ignite = Math.max(0, this.ignite - dt * 2.4);
 
       // Smooth EMBER vitality response by combustion regime
@@ -846,6 +889,7 @@ export class FlameRenderer {
     gl.uniform2f(u.uWind, st.windX ?? st.windNorm * 0.32, st.windY ?? 0);
     gl.uniform1f(u.uFlowDirX, st.flowDirX ?? 1.0);
     gl.uniform1i(u.uSteps, STEP_TIERS[this.tierIndex] ?? 22);
+    gl.uniform1f(u.uLightMode, this.lightMode ? 1.0 : 0.0);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
   }
 
@@ -854,7 +898,7 @@ export class FlameRenderer {
     if (!ctx || !this.sprites2d) return;
     const w = this.canvas.width;
     const h = this.canvas.height;
-    ctx.fillStyle = '#050812';
+    ctx.fillStyle = this.lightMode ? '#eef3fa' : '#050812';
     ctx.fillRect(0, 0, w, h);
 
     const st = this.state;
@@ -868,7 +912,7 @@ export class FlameRenderer {
     const sprite = st.isCool > 0.5 ? this.sprites2d.cool : st.soot > 0.42 ? this.sprites2d.soot : this.sprites2d.blue;
 
     ctx.save();
-    ctx.globalCompositeOperation = 'lighter';
+    ctx.globalCompositeOperation = this.lightMode ? 'source-over' : 'lighter';
     for (let i = 0; i < 4; i++) {
       const ph = this.time * (2.6 + i * 0.7) + i * 1.57;
       const dx = Math.sin(ph) * r * (0.06 + 0.08 * (st.shapeBf || 0));

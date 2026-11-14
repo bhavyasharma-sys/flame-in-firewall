@@ -24,7 +24,8 @@ function navigate(tab) {
     btn.classList.toggle('active', btn.dataset.tab === tab);
   });
   // Close mobile drawer if open
-  document.getElementById('sidebar')?.classList.remove('mobile-open');
+  document.getElementById('mobile-drawer')?.classList.remove('open');
+  window.scrollTo({ top: 0, behavior: 'instant' });
   emit('tab:changed', tab);
 }
 
@@ -207,11 +208,14 @@ async function bootstrap() {
   // Apply saved theme immediately
   setTheme(state.theme);
 
-  // Register PWA service worker for offline shell caching
+  // Register PWA service worker for offline shell caching (always check for fresh updates)
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('/sw.js').catch((err) => {
-      console.warn('Service worker registration failed:', err);
-    });
+    navigator.serviceWorker
+      .register('/sw.js', { updateViaCache: 'none' })
+      .then((reg) => reg.update().catch(() => {}))
+      .catch((err) => {
+        console.warn('Service worker registration failed:', err);
+      });
   }
 
   // Theme slider toggle
@@ -219,15 +223,49 @@ async function bootstrap() {
     setTheme(state.theme === 'dark' ? 'light' : 'dark');
   });
 
-  // Navigation items
+  // Brand emblem & Ask CTA
+  document.getElementById('brand-home-link')?.addEventListener('click', () => navigate('dashboard'));
+  document.getElementById('nav-ask-cta')?.addEventListener('click', () => navigate('chat'));
+
+  // Navigation items (top pill bar + mobile drawer)
   document.querySelectorAll('.nav-item').forEach((btn) => {
     btn.addEventListener('click', () => navigate(btn.dataset.tab));
   });
 
   // Mobile menu button
-  document.getElementById('mobile-menu-btn')?.addEventListener('click', () => {
-    document.getElementById('sidebar')?.classList.toggle('mobile-open');
+  document.getElementById('mobile-menu-btn')?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    document.getElementById('mobile-drawer')?.classList.toggle('open');
   });
+
+  document.addEventListener('click', (e) => {
+    const drawer = document.getElementById('mobile-drawer');
+    if (drawer?.classList.contains('open') && !e.target.closest('#mobile-drawer') && !e.target.closest('#mobile-menu-btn')) {
+      drawer.classList.remove('open');
+    }
+  });
+
+  // Subtle rAF-throttled ambient cursor glow (skipped under prefers-reduced-motion)
+  const reduceMotion = typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (!reduceMotion) {
+    let glowRaf = null;
+    let mx = 0;
+    let my = 0;
+    window.addEventListener(
+      'pointermove',
+      (e) => {
+        mx = e.clientX;
+        my = e.clientY;
+        if (glowRaf !== null) return;
+        glowRaf = requestAnimationFrame(() => {
+          glowRaf = null;
+          document.body.style.setProperty('--mouse-x', `${mx}px`);
+          document.body.style.setProperty('--mouse-y', `${my}px`);
+        });
+      },
+      { passive: true }
+    );
+  }
 
   // Active scenario pill -> Cabin Lab
   document.getElementById('active-scenario-pill')?.addEventListener('click', () => navigate('cabin'));

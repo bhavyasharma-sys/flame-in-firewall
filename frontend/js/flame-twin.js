@@ -7,7 +7,7 @@
 import { api } from './api.js';
 import { FLAME_SCENES, FUEL_MODES, computeFlameVisuals } from './flame-physics.js';
 import { FlameRenderer } from './flame-shader.js';
-import { chartThemeColors, emit, esc, on, setActiveCabin, state } from './state.js';
+import { bindEditableSliderValue, chartThemeColors, emit, esc, on, setActiveCabin, state } from './state.js';
 
 let renderer = null;
 let ventChart = null;
@@ -79,6 +79,7 @@ export async function initFlameTwin() {
   renderer = new FlameRenderer(canvas, {
     onStats: (stats) => updateEngineBadge(stats),
   });
+  renderer.setTheme(state.theme);
   updateEngineBadge(renderer.getStats());
 
   renderScenePills();
@@ -126,7 +127,8 @@ export async function initFlameTwin() {
     }
   });
 
-  on('theme:changed', () => {
+  on('theme:changed', (theme) => {
+    renderer?.setTheme(theme);
     if (ventCurveData) renderVentilationChart();
   });
 
@@ -198,12 +200,12 @@ function schedulePhysicsUpdate() {
 }
 
 function bindControls() {
-  const bindSlider = (id, key, suffix, parseFn = parseFloat) => {
+  const bindSlider = (id, key, suffix, minVal, maxVal, parseFn = parseFloat) => {
     const el = document.getElementById(id);
     if (!el) return;
-    el.addEventListener('input', () => {
-      twinState[key] = parseFn(el.value);
-      twinState.sceneId = 'custom';
+    const applyValue = (num) => {
+      twinState[key] = num;
+      if (key !== 'speed') twinState.sceneId = 'custom';
       const valEl = document.getElementById(`${id}-val`);
       if (valEl) valEl.textContent = `${twinState[key]}${suffix}`;
       if (key === 'speed') {
@@ -211,14 +213,23 @@ function bindControls() {
       } else {
         schedulePhysicsUpdate();
       }
+    };
+    el.addEventListener('input', () => applyValue(parseFn(el.value)));
+    bindEditableSliderValue({
+      sliderId: id,
+      min: minVal,
+      max: maxVal,
+      getValue: () => twinState[key],
+      formatValue: (v) => `${v}${suffix}`,
+      onCommit: applyValue,
     });
   };
 
-  bindSlider('twin-gravity', 'gravityG', ' g');
-  bindSlider('twin-o2', 'oxygenPct', '%');
-  bindSlider('twin-flow', 'flowCmS', ' cm/s');
-  bindSlider('twin-pressure', 'pressureKpa', ' kPa');
-  bindSlider('twin-speed', 'speed', 'x');
+  bindSlider('twin-gravity', 'gravityG', ' g', 0, null);
+  bindSlider('twin-o2', 'oxygenPct', '%', 0, null);
+  bindSlider('twin-flow', 'flowCmS', ' cm/s', null, null);
+  bindSlider('twin-pressure', 'pressureKpa', ' kPa', 0, null);
+  bindSlider('twin-speed', 'speed', 'x', 0, null);
 
   document.getElementById('twin-ignite-btn')?.addEventListener('click', () => {
     renderer?.triggerIgnite();
@@ -248,10 +259,10 @@ function bindControls() {
 
   document.getElementById('twin-push-cabin-btn')?.addEventListener('click', () => {
     setActiveCabin({
-      gravity_g: twinState.gravityG,
-      oxygen_pct: twinState.oxygenPct,
-      flow_velocity_cm_s: twinState.flowCmS,
-      pressure_kpa: twinState.pressureKpa,
+      gravity_g: Math.max(0, twinState.gravityG),
+      oxygen_pct: Math.max(0, twinState.oxygenPct),
+      flow_velocity_cm_s: Math.abs(twinState.flowCmS),
+      pressure_kpa: Math.max(0, twinState.pressureKpa),
     });
     emit('navigate', 'cabin');
   });
@@ -268,7 +279,11 @@ function bindControls() {
 function syncInputsFromState() {
   const setPair = (id, val, suffix) => {
     const el = document.getElementById(id);
-    if (el) el.value = String(val);
+    if (el) {
+      const sMin = Number(el.min);
+      const sMax = Number(el.max);
+      el.value = String(Math.min(sMax, Math.max(sMin, Number(val))));
+    }
     const valEl = document.getElementById(`${id}-val`);
     if (valEl) valEl.textContent = `${val}${suffix}`;
   };

@@ -67,17 +67,29 @@ class RAGPipeline:
         # Precompute valid citation sets for sentence-level verification
         self._valid_doc_pages: set[tuple[str, int]] = set()
         self._valid_doc_ids: set[str] = set()
-        for doc in all_data.get("documents") or []:
+        self._valid_exp_ids: set[str] = set()
+        self.refresh_valid_citations()
+
+    def refresh_valid_citations(self, all_data: Optional[dict[str, Any]] = None) -> None:
+        """Refresh valid [DOC-XX p.Y] / [LIVE-XX p.Y] / [EXP-XXXX] citation sets after corpus updates."""
+        if all_data is not None:
+            self.all_data = all_data
+        valid_pages: set[tuple[str, int]] = set()
+        valid_ids: set[str] = set()
+        for doc in self.all_data.get("documents") or []:
             did = str(doc.get("doc_id") or "").upper()
             if did:
-                self._valid_doc_ids.add(did)
+                valid_ids.add(did)
                 for p in doc.get("pages") or []:
-                    self._valid_doc_pages.add((did, int(p.get("page", 1))))
-        self._valid_exp_ids: set[str] = {
+                    valid_pages.add((did, int(p.get("page", 1))))
+        valid_exps: set[str] = {
             str(r.get("experiment_id") or "").upper()
-            for r in (all_data.get("test_runs") or [])
+            for r in (self.all_data.get("test_runs") or [])
             if r.get("experiment_id")
         }
+        self._valid_doc_pages = valid_pages
+        self._valid_doc_ids = valid_ids
+        self._valid_exp_ids = valid_exps
 
     # ── Domain & Intent Classification ────────────────────────────────────────
 
@@ -202,6 +214,15 @@ class RAGPipeline:
         active_memory = memory_override or self.memory
         is_brief = any(t in user_question.lower() for t in _BRIEF_TRIGGERS)
         in_domain = is_brief or bool(scenario) or self._is_in_domain(user_question)
+
+        # If a brand-new NASA topic/payload appeared via live NASA web sync, allow strong live lexical hits
+        if not in_domain and not _ANTI_DOMAIN_RE.search(user_question):
+            probe = self.vectorstore.search(user_question, top_k=3)
+            if any(
+                hit.get("metadata", {}).get("is_live") and float(hit.get("bm25_score") or 0.0) >= 6.5
+                for hit in probe
+            ):
+                in_domain = True
 
         if not in_domain:
             return {
@@ -482,29 +503,70 @@ class RAGPipeline:
         return combined if combined.number_of_nodes() > 0 else None
 
     @staticmethod
-    def get_source_url(name: str = "", source: str = "") -> str:
-        combined = f"{name} {source}".lower()
-        if "bass" in combined:
+    def get_source_url(name: str = "", source: str = "", extra: str = "") -> str:
+        combined = f"{name} {source} {extra}".lower()
+        if any(w in combined for w in ("1gnufsb96", "challenge_brief", "challenge brief", "doc-brief")):
+            return "https://docs.google.com/document/d/1gnuFsb96_K2457aZGRiJVGeAuKk-xj8Zh7okbYMtC0U/edit"
+        if "bass" in combined or "opposed-flow" in combined or "opposed flow" in combined or "ventilation paradox" in combined:
             return "https://psi.nasa.gov/investigation/BASS"
-        if "acme" in combined:
+        if "acme" in combined or "spherical gaseous" in combined:
             return "https://psi.nasa.gov/investigation/ACME"
         if "saffire" in combined:
             return "https://ntrs.nasa.gov/citations/20160005234"
-        if "flex" in combined:
+        if "flex" in combined or "cool flame" in combined or "droplet" in combined:
             return "https://psi.nasa.gov/investigation/FLEX"
         if "sofie" in combined:
             return "https://psi.nasa.gov/investigation/SoFIE"
-        if "spice" in combined:
+        if "spice" in combined or "same" in combined or "smoke" in combined or "soot" in combined:
             return "https://psi.nasa.gov/investigation/SPICE"
-        if "apollo" in combined:
+        if "apollo" in combined or "mir" in combined or "incident" in combined:
             return "https://sma.nasa.gov/sma-disciplines/accllp/apollo-1"
-        if "spinoff" in combined or "scba" in combined:
+        if "spinoff" in combined or "scba" in combined or "firefighting" in combined or "daft" in combined:
             return "https://spinoff.nasa.gov/node/9582"
-        if any(w in combined for w in ("material", "polymer", "acrylic", "nomex", "teflon", "kapton", "flammability", "std-6001", "guideline", "safety")):
+        if any(w in combined for w in ("partial gravity", "lunar", "martian", "mars", "artemis", "slice", "researcher", "iss")):
+            return "https://www.nasa.gov/missions/station/a-researchers-guide-to-combustion-science/"
+        if any(w in combined for w in ("material", "polymer", "acrylic", "pmma", "nomex", "teflon", "kapton", "kevlar", "flammability", "std-6001", "guideline", "safety", "oxygen", "co2", "diluent")):
             return "https://standards.nasa.gov/standard/nasa/nasa-std-6001"
-        if any(w in combined for w in ("1gnufsb96", "challenge_brief", "challenge brief", "brief")):
-            return "https://docs.google.com/document/d/1gnuFsb96_K2457aZGRiJVGeAuKk-xj8Zh7okbYMtC0U/edit"
-        return "Exact URL not provided in database"
+        return "https://www.nasa.gov/glenn/glenn-expertise-space-exploration/physical-sciences-program/combustion-science/"
+
+    @staticmethod
+    def get_source_pdf(doc_id: str = "", name: str = "", source: str = "", extra: str = "") -> Optional[str]:
+        doc_pdf_map = {
+            "DOC-01": "nasa_glenn_bass.pdf",
+            "DOC-02": "nasa_glenn_saffire.pdf",
+            "DOC-03": "nasa_glenn_flex.pdf",
+            "DOC-04": "nasa_glenn_acme.pdf",
+            "DOC-05": "nasa_glenn_slice.pdf",
+            "DOC-06": "iss_researchers_guide_combustion_science.pdf",
+            "DOC-07": "nasa_glenn_same.pdf",
+            "DOC-08": "nasa_glenn_daft.pdf",
+            "ISS-ACME": "nasa_glenn_acme.pdf",
+            "ISS-BASS-II": "nasa_glenn_bass.pdf",
+            "ISS-FLEX": "nasa_glenn_flex.pdf",
+            "ISS-SOFIE": "nasa_glenn_spice.pdf",
+            "DOC-BRIEF": "iss_researchers_guide_combustion_science.pdf",
+        }
+        did = str(doc_id or "").upper().strip()
+        if did in doc_pdf_map:
+            return f"/papers/{doc_pdf_map[did]}"
+        combined = f"{name} {source} {extra}".lower()
+        if "bass" in combined or "opposed-flow" in combined or "opposed flow" in combined or "ventilation" in combined:
+            return "/papers/nasa_glenn_bass.pdf"
+        if "saffire" in combined or "cygnus" in combined:
+            return "/papers/nasa_glenn_saffire.pdf"
+        if "flex" in combined or "cool flame" in combined or "droplet" in combined:
+            return "/papers/nasa_glenn_flex.pdf"
+        if "acme" in combined or "gaseous" in combined:
+            return "/papers/nasa_glenn_acme.pdf"
+        if "spice" in combined or "sofie" in combined:
+            return "/papers/nasa_glenn_spice.pdf"
+        if "slice" in combined or "partial gravity" in combined or "lunar" in combined or "mars" in combined or "martian" in combined:
+            return "/papers/nasa_glenn_slice.pdf"
+        if "same" in combined or "smoke" in combined or "soot" in combined or "detector" in combined or "apollo" in combined or "mir" in combined:
+            return "/papers/nasa_glenn_same.pdf"
+        if "daft" in combined or "spinoff" in combined or "firefighting" in combined:
+            return "/papers/nasa_glenn_daft.pdf"
+        return "/papers/iss_researchers_guide_combustion_science.pdf"
 
     @staticmethod
     def _format_vector_results(results: list[dict[str, Any]]) -> str:
@@ -514,7 +576,9 @@ class RAGPipeline:
         for doc in results:
             meta = doc.get("metadata", {})
             title = meta.get("experiment_name") or "NASA Record"
-            url = meta.get("url") or RAGPipeline.get_source_url(str(title), str(meta.get("source", "")))
+            raw_url = str(meta.get("url") or "")
+            extra = f"{meta.get('source_experiment', '')} {meta.get('investigation', '')}"
+            url = raw_url if raw_url.startswith("http") else RAGPipeline.get_source_url(str(title), str(meta.get("source", "")), extra)
             tag = meta.get("cite_tag") or ""
             parts.append(f"Tag: {tag}\nSource Title: {title}\nSource URL: {url}\nContent: {doc.get('text', '').strip()}\n")
         return "\n".join(parts)
@@ -544,7 +608,24 @@ class RAGPipeline:
             title = str(meta.get("experiment_name") or "NASA Combustion Record")
             doc_id = str(meta.get("doc_id") or "")
             page = meta.get("page")
-            url = str(meta.get("url") or "") or RAGPipeline.get_source_url(title, str(meta.get("source", "")))
+            extra = f"{meta.get('source_experiment', '')} {meta.get('investigation', '')}"
+            raw_url = str(meta.get("url") or "").strip()
+
+            pdf_file = str(meta.get("pdf_file") or "").strip()
+            is_live = bool(meta.get("is_live") or meta.get("category") == "live_web")
+            if raw_url.startswith("/papers/"):
+                pdf_url = raw_url
+                web_url = RAGPipeline.get_source_url(title, str(meta.get("source", "")), extra)
+            else:
+                web_url = raw_url if raw_url.startswith("http") else RAGPipeline.get_source_url(title, str(meta.get("source", "")), extra)
+                if pdf_file:
+                    pdf_url = f"/papers/{pdf_file}"
+                elif is_live:
+                    pdf_url = None
+                else:
+                    pdf_url = RAGPipeline.get_source_pdf(doc_id, title, str(meta.get("source", "")), extra)
+
+            pdf_name = pdf_url.rsplit("/", 1)[-1] if pdf_url else None
             key = f"{doc_id or title}:{page or ''}"
             if key in seen:
                 continue
@@ -552,9 +633,13 @@ class RAGPipeline:
             sources.append(
                 {
                     "title": title,
-                    "url": url,
+                    "url": web_url,
+                    "pdf_url": pdf_url,
+                    "pdf_name": pdf_name,
                     "doc_id": doc_id or None,
                     "page": int(page) if page else None,
+                    "is_live": is_live,
+                    "last_synced_at": meta.get("last_synced_at") or None,
                     "cite_tag": meta.get("cite_tag") or (f"[{doc_id} p.{page}]" if doc_id and page else None),
                 }
             )
@@ -562,11 +647,16 @@ class RAGPipeline:
             eid = str(run.get("experiment_id") or "")
             if eid and eid not in seen:
                 seen.add(eid)
+                prog = str(run.get("program") or "")
+                sdoc = str(run.get("source_doc_id") or "")
+                pdf_url = RAGPipeline.get_source_pdf(sdoc, prog)
                 sources.append(
                     {
-                        "title": f"{eid} ({run.get('program')} — {run.get('fuel_material')})",
-                        "url": RAGPipeline.get_source_url(str(run.get("program") or "")),
-                        "doc_id": run.get("source_doc_id"),
+                        "title": f"{eid} ({prog} — {run.get('fuel_material')})",
+                        "url": RAGPipeline.get_source_url(prog),
+                        "pdf_url": pdf_url,
+                        "pdf_name": pdf_url.rsplit("/", 1)[-1] if pdf_url else None,
+                        "doc_id": sdoc or None,
                         "page": run.get("source_page"),
                         "experiment_id": eid,
                         "cite_tag": f"[{eid}]",

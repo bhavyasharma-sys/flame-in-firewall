@@ -247,6 +247,124 @@ export async function sendMessage(text) {
   }
 }
 
+function extractHostname(url) {
+  try {
+    return new URL(url).hostname.replace(/^www\./, '');
+  } catch {
+    return 'nasa.gov';
+  }
+}
+
+function renderSourcesBox(sources, oos) {
+  if (oos || !sources || !sources.length) return '';
+
+  // Deduplicate external websites by URL
+  const websites = [];
+  const seenWeb = new Set();
+  // Deduplicate bundled NASA PDFs by pdf_url
+  const pdfs = [];
+  const seenPdf = new Set();
+
+  for (const s of sources) {
+    const webUrl = String(s.url || '').trim();
+    if (/^https?:\/\//i.test(webUrl) && !seenWeb.has(webUrl)) {
+      seenWeb.add(webUrl);
+      websites.push({
+        title: s.title || extractHostname(webUrl),
+        url: webUrl,
+        host: extractHostname(webUrl),
+        isLive: Boolean(s.is_live),
+        docId: s.is_live ? (s.doc_id || null) : null,
+        page: s.page || 1,
+      });
+    }
+
+    const pdfUrl = String(s.pdf_url || (webUrl.startsWith('/papers/') ? webUrl : '')).trim();
+    if (pdfUrl.startsWith('/papers/') && !seenPdf.has(pdfUrl)) {
+      seenPdf.add(pdfUrl);
+      pdfs.push({
+        name: s.pdf_name || pdfUrl.split('/').pop(),
+        pdfUrl,
+        title: s.title || s.doc_id || 'NASA PDF',
+        docId: s.doc_id || null,
+        page: s.page || 1,
+      });
+    }
+  }
+
+  if (!websites.length && !pdfs.length) return '';
+
+  const webHtml = websites.length
+    ? `
+      <div class="sources-group">
+        <div class="sources-group-label">Websites (${websites.length})</div>
+        <div class="sources-link-list">
+          ${websites
+            .slice(0, 6)
+            .map(
+              (w) => `
+              <span class="source-pdf-wrap">
+                <a class="source-link-pill" href="${esc(w.url)}" target="_blank" rel="noopener noreferrer" title="${esc(w.title)} — ${esc(w.url)}">
+                  ${w.isLive ? '<span class="source-live-tag">LIVE</span>' : ''}
+                  <span class="source-host">${esc(w.host)}</span>
+                  <span class="source-title">${esc(w.title)}</span>
+                  <span class="source-ext" aria-hidden="true">↗</span>
+                </a>
+                ${
+                  w.isLive && w.docId
+                    ? `<button type="button" class="cite-chip" data-doc-id="${esc(w.docId)}" data-doc-page="${esc(w.page)}" title="Read live-synced NASA page">${esc(w.docId)} p.${esc(w.page)}</button>`
+                    : ''
+                }
+              </span>
+            `
+            )
+            .join('')}
+        </div>
+      </div>
+    `
+    : '';
+
+  const pdfHtml = pdfs.length
+    ? `
+      <div class="sources-group">
+        <div class="sources-group-label">NASA PDFs (${pdfs.length})</div>
+        <div class="sources-link-list">
+          ${pdfs
+            .slice(0, 6)
+            .map(
+              (p) => `
+              <span class="source-pdf-wrap">
+                <a class="source-pdf-pill" href="${esc(p.pdfUrl)}" target="_blank" rel="noopener noreferrer" title="Open ${esc(p.name)}">
+                  <span class="source-pdf-tag">PDF</span>
+                  <span class="source-title">${esc(p.name)}</span>
+                  <span class="source-ext" aria-hidden="true">↗</span>
+                </a>
+                ${
+                  p.docId
+                    ? `<button type="button" class="cite-chip" data-doc-id="${esc(p.docId)}" data-doc-page="${esc(p.page)}" title="Open in Document Reader">${esc(p.docId)}${p.page ? ` p.${p.page}` : ''}</button>`
+                    : ''
+                }
+              </span>
+            `
+            )
+            .join('')}
+        </div>
+      </div>
+    `
+    : '';
+
+  return `
+    <div class="sources-box">
+      <div class="sources-box-header">
+        <span>Data Sources</span>
+        <span class="mono text-muted" style="font-size:10px;">Verified Websites &amp; Bundled NASA PDFs</span>
+      </div>
+      ${webHtml}
+      ${pdfHtml}
+    </div>
+  `;
+}
+
 function renderAuditPanel(slot, auditData, sources, fallbackOos = false, fallbackProvider = '') {
   const cit = auditData?.citations || auditData || {};
   const oos = Boolean(auditData?.out_of_scope ?? fallbackOos);
@@ -285,28 +403,10 @@ function renderAuditPanel(slot, auditData, sources, fallbackOos = false, fallbac
     `
     : '';
 
-  const providerSuffix = provider ? ` · ${esc(provider)}` : '';
-  const sourcesHtml = !oos && sources.length
-    ? `
-      <details style="margin-top:6px;">
-        <summary style="cursor:pointer;color:var(--text-secondary);">
-          Retrieved Evidence (${sources.length} hybrid chunks${providerSuffix})
-        </summary>
-        <div class="flex flex-wrap gap-2 mt-2">
-          ${sources
-            .slice(0, 6)
-            .map((s) => {
-              const label = s.doc_id || s.experiment_id || s.cite_tag || s.category || 'NASA';
-              const scoreText = Number.isFinite(s.score) ? ` (${Math.round(s.score * 100)}%)` : '';
-              return `<span class="badge">${esc(label)}: ${esc(s.title || '')}${scoreText}</span>`;
-            })
-            .join('')}
-        </div>
-      </details>
-    `
-    : '';
+  const sourcesBoxHtml = renderSourcesBox(sources, oos);
 
   slot.innerHTML = `
+    ${sourcesBoxHtml}
     <div class="audit-panel">
       <div class="flex items-center justify-between flex-wrap gap-2">
         ${statusBadge}
@@ -314,7 +414,6 @@ function renderAuditPanel(slot, auditData, sources, fallbackOos = false, fallbac
       </div>
       ${citeButtons ? `<div class="flex flex-wrap gap-2 mt-2">${citeButtons}</div>` : ''}
       ${droppedHtml}
-      ${sourcesHtml}
     </div>
   `;
 }

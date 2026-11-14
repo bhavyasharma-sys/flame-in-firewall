@@ -279,7 +279,7 @@ class LLMClient:
                 if ln.strip()
                 and not ln.strip().startswith("#")
                 and not ln.strip().startswith(">")
-                and not ln.strip().startswith("[DOC-")
+                and not re.match(r"^\[[A-Za-z0-9_-]+\s+p\.\d+\]", ln.strip())
                 and not ln.strip().lower().startswith("entity:")
             ]
             snippet = " ".join(cleaned_lines)[:310].strip()
@@ -329,19 +329,6 @@ class LLMClient:
         lines.append(
             "- **Detection & Post-Extinction Watch:** Microgravity fires generate larger soot aggregates (>300 nm) and can persist as invisible ~650 K cool flames; use dual-wavelength photoelectric smoke detectors inside return ducts and maintain thermal-camera quarantine before restoring airflow [DOC-03 p.2] [DOC-06 p.2]."
         )
-        lines.append("")
-
-        # 5. Cited NASA Sources footer
-        if sources:
-            formatted = []
-            for s in sources[:6]:
-                url = s.get("url", "")
-                title = s.get("title", "NASA Source")
-                if url.startswith("http") or url.startswith("/papers/"):
-                    formatted.append(f"[{title}]({url})")
-                else:
-                    formatted.append(f"[{title}] (Exact URL not provided in database)")
-            lines.append("Cited NASA Sources: " + " | ".join(formatted))
 
         return "\n".join(lines)
 
@@ -362,7 +349,4 @@ class LLMClient:
                 if len(cleaned) > 15:
                     lines.append(f"{idx}. {cleaned} [DOC-BRIEF p.1]")
                     idx += 1
-        lines.append(
-            "\nCited NASA Sources: [NASA Space Apps 2026 Challenge Brief — Flame in Freefall](https://docs.google.com/document/d/1gnuFsb96_K2457aZGRiJVGeAuKk-xj8Zh7okbYMtC0U/edit)"
-        )
         return "\n".join(lines)

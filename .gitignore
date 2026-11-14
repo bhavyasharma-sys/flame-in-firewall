@@ -5,6 +5,7 @@ __pycache__/
 .env
 data/chromadb/
 data/conversation_memory.json
+data/live_nasa_cache.json
 .pytest_cache/
 .ruff_cache/
 .mypy_cache/

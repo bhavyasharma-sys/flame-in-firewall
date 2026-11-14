@@ -8,16 +8,22 @@ in-chat Matplotlib chart generation, citation audit, and out-of-scope guard.
 from __future__ import annotations
 
 import json
+import threading
+import time
 import unittest
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from fastapi.testclient import TestClient
 
+from core.nasa_live_sync import extract_ntrs_api_document
 import server
 
 
 class FlameInFreefallAPITests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
+        # Prevent unmocked external NASA background polling during offline test runs
+        server.engine.live_sync._last_run_monotonic = time.monotonic()
         cls.client = TestClient(server.app)
 
     def test_health_and_stats(self) -> None:
@@ -438,6 +444,206 @@ class FlameInFreefallAPITests(unittest.TestCase):
         )
         self.assertEqual(rb2.status_code, 200)
         self.assertEqual(len(rb2.json()["history"]), 2)
+
+    def test_regression_chat_sources_websites_and_pdfs(self) -> None:
+        r = self.client.post(
+            "/api/chat",
+            json={"message": "Explain partial gravity lunar Mars flammability and SAFFIRE findings."},
+            headers={"X-Session-Id": "sources-box-test"},
+        )
+        self.assertEqual(r.status_code, 200)
+        data = r.json()
+        self.assertNotIn("Cited NASA Sources:", data["answer"])
+        self.assertNotIn("Exact URL not provided in database", data["answer"])
+
+        sources = data["sources"]
+        self.assertTrue(len(sources) > 0)
+        web_urls = [s["url"] for s in sources if str(s.get("url") or "").startswith("https://")]
+        pdf_urls = [s["pdf_url"] for s in sources if str(s.get("pdf_url") or "").startswith("/papers/")]
+        self.assertTrue(len(web_urls) > 0, msg="Expected at least one https website source")
+        self.assertTrue(len(pdf_urls) > 0, msg="Expected at least one bundled /papers/*.pdf source")
+        for pdf in set(pdf_urls):
+            pr = self.client.get(pdf)
+            self.assertEqual(pr.status_code, 200, msg=f"Bundled PDF not served: {pdf}")
+
+    def test_live_nasa_sync_status_domain_guard_and_ntrs_parser(self) -> None:
+        st = self.client.get("/api/sync/status")
+        self.assertEqual(st.status_code, 200)
+        data = st.json()
+        self.assertGreaterEqual(data["total_watched_sources"], 11)
+        self.assertTrue(data["corpus_digest"])
+        self.assertGreater(data["total_chunks"], 100)
+
+        # SSRF guard: non-NASA domain & non-HTTPS must be rejected with 422
+        bad_host = self.client.post(
+            "/api/sync/sources",
+            json={"url": "https://example.com/fake-nasa", "sync_now": False},
+        )
+        self.assertEqual(bad_host.status_code, 422)
+
+        bad_scheme = self.client.post(
+            "/api/sync/sources",
+            json={"url": "http://www.nasa.gov/combustion", "sync_now": False},
+        )
+        self.assertEqual(bad_scheme.status_code, 422)
+
+        # Built-in NASA sources cannot be deleted
+        del_builtin = self.client.delete("/api/sync/sources/LIVE-01")
+        self.assertEqual(del_builtin.status_code, 400)
+
+        # Verify NTRS JSON citations parser extracts structured pages cleanly
+        parsed_ntrs = extract_ntrs_api_document(
+            {
+                "results": [
+                    {
+                        "id": 20260009999,
+                        "title": "SoFIE Lunar Exploration Flammability Limits Update",
+                        "abstract": "Measured opposed-flow PMMA flame spread at 34% O2 and 56.5 kPa.",
+                        "distributionDate": "2026-09-15T00:00:00Z",
+                        "authorAffiliations": [{"meta": {"author": {"name": "S. L. Olson"}}}],
+                        "subjectCategories": ["Spacecraft Fire Safety"],
+                    }
+                ]
+            }
+        )
+        self.assertEqual(len(parsed_ntrs["pages"]), 1)
+        self.assertIn("20260009999", parsed_ntrs["pages"][0]["text"])
+        self.assertIn("S. L. Olson", parsed_ntrs["pages"][0]["text"])
+
+    def test_live_nasa_website_update_auto_updates_rag_pipeline(self) -> None:
+        # Local HTTP server simulating a live NASA webpage that updates over time
+        page_state = {
+            "etag": '"nasa-v1"',
+            "html": (
+                "<!doctype html><html><head><title>NASA SoFIE Live Bulletin | NASA</title></head>"
+                "<body><nav>Skip to main content</nav><main>"
+                "<h1>SoFIE Lunar Fire Safety Live Telemetry Update</h1>"
+                "<p>NASA Glenn engineers reported that the MIST-7 lunar habitat test measured a "
+                "critical flame quenching pressure threshold of 14.7 kPa under 0.16g gravity and 34% oxygen.</p>"
+                "</main></body></html>"
+            ),
+        }
+
+        class MockNasaHandler(BaseHTTPRequestHandler):
+            def do_GET(self) -> None:  # noqa: N802
+                if self.headers.get("If-None-Match") == page_state["etag"]:
+                    self.send_response(304)
+                    self.send_header("ETag", page_state["etag"])
+                    self.end_headers()
+                    return
+                body = page_state["html"].encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "text/html; charset=utf-8")
+                self.send_header("ETag", page_state["etag"])
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+            def log_message(self, format: str, *args) -> None:  # noqa: A002
+                pass
+
+        httpd = ThreadingHTTPServer(("127.0.0.1", 0), MockNasaHandler)
+        port = httpd.server_address[1]
+        thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+        thread.start()
+
+        prev_allow_local = server.engine.live_sync.allow_local_test_urls
+        added_doc_id = None
+        try:
+            server.engine.live_sync.allow_local_test_urls = True
+            base_digest = self.client.get("/api/sync/status").json()["corpus_digest"]
+
+            # 1. Register & sync v1 of the live NASA webpage
+            add_resp = self.client.post(
+                "/api/sync/sources",
+                json={
+                    "url": f"http://127.0.0.1:{port}/sofie-live-update",
+                    "title": "NASA SoFIE Live Bulletin",
+                    "investigation": "SoFIE Live",
+                    "sync_now": True,
+                },
+            )
+            self.assertEqual(add_resp.status_code, 200)
+            added = add_resp.json()
+            added_doc_id = added["source"]["doc_id"]
+            self.assertTrue(added["sync"]["rag_rebuilt"])
+            self.assertEqual(added["sync"]["updated_count"], 1)
+            digest_v1 = added["corpus_digest"]
+            self.assertNotEqual(digest_v1, base_digest)
+
+            # Document reader immediately serves the live-synced NASA page
+            doc_resp = self.client.get(f"/api/documents/{added_doc_id}")
+            self.assertEqual(doc_resp.status_code, 200)
+            self.assertTrue(doc_resp.json()["is_live"])
+            self.assertIn("14.7 kPa", doc_resp.json()["pages"][0]["text"])
+
+            # FlameAI RAG immediately answers using v1 live NASA data & verifies [LIVE-XX p.1]
+            chat_v1 = self.client.post(
+                "/api/chat",
+                json={"message": "What MIST-7 lunar flame quenching pressure threshold did NASA measure?"},
+                headers={"X-Session-Id": "live-sync-rag-v1"},
+            )
+            self.assertEqual(chat_v1.status_code, 200)
+            c1 = chat_v1.json()
+            self.assertFalse(c1["out_of_scope"])
+            self.assertIn("14.7 kPa", c1["answer"])
+            self.assertTrue(any(s.get("is_live") for s in c1["sources"]))
+            self.assertTrue(
+                any(c.get("doc_id") == added_doc_id for c in c1["citations"]["verified_doc_citations"]),
+                msg=f"Expected verified live citation {added_doc_id}, got {c1['citations']}",
+            )
+
+            # 2. Re-sync without changes -> 304 Not Modified, zero unnecessary RAG rebuilds
+            resync_304 = self.client.post(
+                "/api/sync/nasa",
+                json={"force": False, "doc_id": added_doc_id},
+            )
+            self.assertEqual(resync_304.status_code, 200)
+            r304 = resync_304.json()
+            self.assertFalse(r304["rag_rebuilt"])
+            self.assertEqual(r304["unchanged_count"], 1)
+            self.assertEqual(r304["corpus_digest_after"], digest_v1)
+
+            # 3. Mutate the live NASA webpage -> sync detects update & hot-swaps RAG pipeline
+            page_state["etag"] = '"nasa-v2"'
+            page_state["html"] = (
+                "<!doctype html><html><head><title>NASA SoFIE Live Bulletin | NASA</title></head>"
+                "<body><main>"
+                "<h1>SoFIE Lunar Fire Safety Live Telemetry Update (Revised)</h1>"
+                "<p>Revised NASA Glenn flight analysis updated the MIST-7 lunar flame quenching "
+                "pressure threshold to 19.3 kPa under 0.16g gravity, validated alongside the newly "
+                "announced HELIOS-9 microgravity smoldering detector payload.</p>"
+                "</main></body></html>"
+            )
+            resync_v2 = self.client.post(
+                "/api/sync/nasa",
+                json={"force": False, "doc_id": added_doc_id},
+            )
+            self.assertEqual(resync_v2.status_code, 200)
+            rv2 = resync_v2.json()
+            self.assertTrue(rv2["rag_rebuilt"])
+            self.assertEqual(rv2["updated_count"], 1)
+            self.assertNotEqual(rv2["corpus_digest_after"], digest_v1)
+
+            # FlameAI RAG now returns the updated 19.3 kPa value & brand-new HELIOS-9 payload (NOT stale 14.7 kPa)
+            chat_v2 = self.client.post(
+                "/api/chat",
+                json={"message": "What is the revised MIST-7 lunar flame quenching pressure threshold and HELIOS-9 payload?"},
+                headers={"X-Session-Id": "live-sync-rag-v2"},
+            )
+            self.assertEqual(chat_v2.status_code, 200)
+            c2 = chat_v2.json()
+            self.assertFalse(c2["out_of_scope"])
+            self.assertIn("19.3 kPa", c2["answer"])
+            self.assertIn("HELIOS-9", c2["answer"])
+            self.assertNotIn("14.7 kPa", c2["answer"])
+        finally:
+            if added_doc_id:
+                del_r = self.client.delete(f"/api/sync/sources/{added_doc_id}")
+                self.assertEqual(del_r.status_code, 200)
+            server.engine.live_sync.allow_local_test_urls = prev_allow_local
+            httpd.shutdown()
+            httpd.server_close()
 
 
 if __name__ == "__main__":

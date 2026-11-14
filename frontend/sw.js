@@ -1,41 +1,34 @@
-const CACHE_NAME = 'flame-freefall-v4';
-const ASSETS = [
-  '/',
-  '/manifest.json',
-  '/css/styles.css',
+const CACHE_NAME = 'flame-freefall-v8';
+const IMMUTABLE_ASSETS = [
   '/icons/icon.svg',
   '/icons/icon-192.png',
   '/icons/icon-512.png',
   '/js/vendor/chart.umd.min.js',
-  '/js/api.js',
-  '/js/app.js',
-  '/js/cabin.js',
-  '/js/chat.js',
-  '/js/dashboard.js',
-  '/js/explorer.js',
-  '/js/flame-physics.js',
-  '/js/flame-shader.js',
-  '/js/flame-twin.js',
-  '/js/graph.js',
-  '/js/ranking.js',
-  '/js/resources.js',
-  '/js/state.js',
 ];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(ASSETS)).catch(() => {})
+    caches.open(CACHE_NAME).then((cache) => cache.addAll(IMMUTABLE_ASSETS)).catch(() => {})
   );
   self.skipWaiting();
 });
 
 self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches.keys().then((keys) =>
-      Promise.all(keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key)))
-    )
+    caches.keys().then((keys) => {
+      const stale = keys.filter((key) => key !== CACHE_NAME);
+      return Promise.all(stale.map((key) => caches.delete(key)))
+        .then(() => self.clients.claim())
+        .then(() => {
+          if (stale.length === 0) return;
+          return self.clients
+            .matchAll({ type: 'window' })
+            .then((clients) =>
+              Promise.all(clients.map((c) => c.navigate(c.url).catch(() => {})))
+            );
+        });
+    })
   );
-  self.clients.claim();
 });
 
 self.addEventListener('fetch', (event) => {
@@ -43,29 +36,26 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
   if (url.origin !== self.location.origin) return;
 
-  // Network-first for API requests, falling back to cache if offline
-  if (url.pathname.startsWith('/api/')) {
-    event.respondWith(
-      fetch(event.request)
-        .then((resp) => resp)
-        .catch(() => caches.match(event.request))
-    );
-    return;
-  }
+  // Only cache immutable binary/vendor assets (PDFs, icons, Chart.js).
+  // Never intercept HTML, JS, CSS, or API calls so updates always load immediately.
+  const isImmutable =
+    url.pathname.startsWith('/papers/') ||
+    url.pathname.startsWith('/icons/') ||
+    url.pathname.startsWith('/js/vendor/');
 
-  // Cache-first with background network refresh for static app shell assets
+  if (!isImmutable) return;
+
   event.respondWith(
-    caches.match(event.request).then((cached) => {
-      const networkFetch = fetch(event.request)
-        .then((resp) => {
+    caches.match(event.request).then(
+      (cached) =>
+        cached ||
+        fetch(event.request).then((resp) => {
           if (resp && resp.ok) {
             const copy = resp.clone();
             caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
           }
           return resp;
         })
-        .catch(() => cached);
-      return cached || networkFetch;
-    })
+    )
   );
 });

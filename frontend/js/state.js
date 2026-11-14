@@ -5,7 +5,13 @@
 const listeners = new Map();
 
 export const state = {
-  theme: localStorage.getItem('fif_theme') || 'dark',
+  theme: (() => {
+    try {
+      return localStorage.getItem('fif_theme_v2') === 'dark' ? 'dark' : 'light';
+    } catch {
+      return 'light';
+    }
+  })(),
   activeTab: 'dashboard',
   stats: null,
   presets: [],
@@ -49,20 +55,26 @@ export function setActiveCabin(partial, { silent = false } = {}) {
 }
 
 export function setTheme(theme) {
-  state.theme = theme === 'light' ? 'light' : 'dark';
+  state.theme = theme === 'dark' ? 'dark' : 'light';
   document.documentElement.setAttribute('data-theme', state.theme);
-  localStorage.setItem('fif_theme', state.theme);
+  try {
+    localStorage.setItem('fif_theme_v2', state.theme);
+  } catch {
+    // ignore storage restrictions
+  }
+  const toggleBtn = document.getElementById('theme-toggle-btn');
+  if (toggleBtn) toggleBtn.setAttribute('aria-checked', String(state.theme === 'dark'));
   emit('theme:changed', state.theme);
 }
 
 export function chartThemeColors() {
   const isLight = state.theme === 'light';
   return {
-    text: isLight ? '#334155' : '#94a3b8',
-    textStrong: isLight ? '#0f172a' : '#f1f5f9',
-    grid: isLight ? 'rgba(15, 23, 42, 0.09)' : 'rgba(148, 163, 184, 0.14)',
-    tooltipBg: isLight ? 'rgba(255, 255, 255, 0.96)' : 'rgba(13, 20, 36, 0.96)',
-    tooltipBorder: isLight ? 'rgba(15, 23, 42, 0.16)' : 'rgba(148, 163, 184, 0.28)',
+    text: isLight ? '#52525b' : '#94a3b8',
+    textStrong: isLight ? '#111827' : '#f8fafc',
+    grid: isLight ? 'rgba(15, 23, 42, 0.07)' : 'rgba(148, 163, 184, 0.14)',
+    tooltipBg: isLight ? 'rgba(255, 255, 255, 0.96)' : 'rgba(15, 23, 42, 0.96)',
+    tooltipBorder: isLight ? 'rgba(15, 23, 42, 0.12)' : 'rgba(148, 163, 184, 0.25)',
   };
 }
 
@@ -84,15 +96,27 @@ export function riskColor(band) {
 }
 
 export function renderRichMarkdown(rawText) {
-  const safe = esc(rawText || '');
+  // Strip any raw trailing "Cited NASA Sources:" footer line (rendered cleanly in the Sources box)
+  const stripped = String(rawText || '').replace(
+    /\n*(?:\*\*|#{1,4}\s*)?Cited NASA Sources:\*?\*?\s*[\s\S]*$/i,
+    ''
+  );
+  const safe = esc(stripped);
   const lines = safe.split('\n');
   let html = '';
   let inList = false;
 
   const formatInline = (line) => {
     let s = line;
-    // Bold & italic
+    // Safe Markdown links: [Label](https://...) or [Label](/papers/...)
+    s = s.replace(
+      /\[([^\]]+)\]\(((?:https?:\/\/|\/papers\/)[^\s)]+)\)/g,
+      (_, label, href) =>
+        `<a class="md-link" href="${href}" target="_blank" rel="noopener noreferrer">${label} ↗</a>`
+    );
+    // Bold, italic & inline code
     s = s.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+    s = s.replace(/(?<!\*)\*([^*]+)\*(?!\*)/g, '<em>$1</em>');
     s = s.replace(/`([^`]+)`/g, '<code class="mono" style="background:var(--bg-surface-3);padding:1px 5px;border-radius:4px;font-size:12px;">$1</code>');
     // Inline clickable citations [DOC-01 p.3], [DOC-BRIEF p.1], or [ISS-BASS-II p.1]
     s = s.replace(
@@ -121,7 +145,10 @@ export function renderRichMarkdown(rawText) {
       }
       continue;
     }
-    if (trimmed.startsWith('### ')) {
+    if (trimmed.startsWith('#### ')) {
+      if (inList) { html += '</ul>'; inList = false; }
+      html += `<h4>${formatInline(trimmed.slice(5))}</h4>`;
+    } else if (trimmed.startsWith('### ')) {
       if (inList) { html += '</ul>'; inList = false; }
       html += `<h3>${formatInline(trimmed.slice(4))}</h3>`;
     } else if (trimmed.startsWith('## ')) {
@@ -146,4 +173,105 @@ export function renderRichMarkdown(rawText) {
   }
   if (inList) html += '</ul>';
   return html;
+}
+
+/**
+ * Turns a slider's value readout span (`#${sliderId}-val`) into a click-to-edit
+ * numeric input so users can either drag the slider OR click the number to type
+ * any custom value. Pass `min: null` / `max: null` for no lower/upper limit.
+ */
+export function bindEditableSliderValue({
+  sliderId,
+  valueId = `${sliderId}-val`,
+  min = null,
+  max = null,
+  getValue,
+  formatValue,
+  onCommit,
+}) {
+  const slider = document.getElementById(sliderId);
+  const valEl = document.getElementById(valueId);
+  if (!valEl) return;
+
+  valEl.classList.add('editable');
+  valEl.tabIndex = 0;
+  valEl.setAttribute('role', 'button');
+  if (min !== null && max !== null) {
+    valEl.title = `Click to enter a custom value (${min}–${max})`;
+  } else if (min !== null) {
+    valEl.title = `Click to enter any custom value (≥ ${min})`;
+  } else {
+    valEl.title = 'Click to enter any custom value';
+  }
+
+  let editing = false;
+
+  const openEditor = () => {
+    if (editing) return;
+    editing = true;
+    const current = Number(getValue());
+    const input = document.createElement('input');
+    input.type = 'number';
+    input.step = 'any';
+    if (min !== null) input.min = String(min);
+    if (max !== null) input.max = String(max);
+    input.value = Number.isFinite(current) ? String(current) : '';
+    input.className = 'slider-val-input';
+    input.setAttribute('aria-label', valEl.title);
+
+    valEl.style.display = 'none';
+    valEl.insertAdjacentElement('afterend', input);
+    input.focus();
+    input.select();
+
+    let finished = false;
+    const close = (commit) => {
+      if (finished) return;
+      finished = true;
+      editing = false;
+      const raw = input.value.trim();
+      input.remove();
+      valEl.style.display = '';
+
+      if (commit && raw !== '') {
+        const parsed = Number(raw);
+        if (Number.isFinite(parsed)) {
+          let val = parsed;
+          if (min !== null) val = Math.max(min, val);
+          if (max !== null) val = Math.min(max, val);
+          const clean = Math.round(val * 10000) / 10000;
+          if (slider) {
+            const sMin = Number(slider.min);
+            const sMax = Number(slider.max);
+            if (Number.isFinite(sMin) && Number.isFinite(sMax)) {
+              slider.value = String(Math.min(sMax, Math.max(sMin, clean)));
+            }
+          }
+          valEl.textContent = formatValue(clean);
+          onCommit(clean);
+          return;
+        }
+      }
+      valEl.textContent = formatValue(Number(getValue()));
+    };
+
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        close(true);
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        close(false);
+      }
+    });
+    input.addEventListener('blur', () => close(true));
+  };
+
+  valEl.addEventListener('click', openEditor);
+  valEl.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      openEditor();
+    }
+  });
 }
