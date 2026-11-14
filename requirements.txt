@@ -1,0 +1,18 @@
+# Web Backend & Server
+fastapi>=0.115.0
+uvicorn[standard]>=0.32.0
+pydantic>=2.8.0
+
+# Knowledge Graph & Scientific Computing
+networkx>=3.2
+numpy>=1.26.0
+matplotlib>=3.8.0
+PyYAML>=6.0.1
+
+# HTTP & Environment
+requests>=2.31.0
+python-dotenv>=1.0.0
+
+# Optional AI & Vector Store Accelerators (graceful offline fallback if omitted)
+# chromadb>=0.5.0
+# google-generativeai>=0.8.0
