@@ -735,6 +735,8 @@ input[type="range"]::-webkit-slider-thumb {
   min-height: 410px;
   border-radius: var(--radius-lg);
   overflow: hidden;
+  contain: layout paint;
+  isolation: isolate;
   background: radial-gradient(circle at 50% 62%, #111827 0%, #05070d 72%, #020308 100%);
   border: 1px solid var(--border-strong);
   box-shadow: var(--shadow-elevated);
@@ -770,12 +772,12 @@ input[type="range"]::-webkit-slider-thumb {
 }
 
 .hud-chip {
-  background: rgba(7, 11, 20, 0.76);
-  backdrop-filter: blur(8px);
+  background: rgba(7, 11, 20, 0.88);
   border: 1px solid rgba(148, 163, 184, 0.24);
   border-radius: 10px;
   padding: 8px 10px;
   color: #f1f5f9;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
 }
 
 .hud-chip-label {

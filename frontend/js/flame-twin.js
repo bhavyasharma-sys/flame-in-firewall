@@ -1,5 +1,7 @@
 /**
- * 3D WebGL2 Volumetric Flame Twin View + BASS-II Ventilation Paradox Curve.
+ * 3D WebGL2 EMBER Volumetric Flame Twin View + BASS-II Ventilation Paradox Curve.
+ * Includes coalesced slider updates, viewport/tab visibility pausing, Play/Pause control,
+ * prefers-reduced-motion support, and live FPS/engine HUD telemetry.
  */
 
 import { api } from './api.js';
@@ -10,6 +12,11 @@ import { chartThemeColors, emit, esc, on, setActiveCabin, state } from './state.
 let renderer = null;
 let ventChart = null;
 let ventCurveData = null;
+let isTwinTabActive = false;
+let isCanvasVisible = true;
+let userPaused = false;
+let pendingPhysicsRaf = null;
+let lastChartVEff = null;
 
 const twinState = {
   gravityG: 0.0,
@@ -21,15 +28,58 @@ const twinState = {
   sceneId: 'iss-0g',
 };
 
+function syncPlaybackState() {
+  if (!renderer) return;
+  const shouldRun = isTwinTabActive && isCanvasVisible && !document.hidden && !userPaused;
+  if (shouldRun) {
+    renderer.paused = false;
+    renderer.start();
+  } else {
+    renderer.stop();
+    if (isTwinTabActive && userPaused) {
+      renderer.paused = true;
+      renderer.renderFrame();
+    }
+  }
+  updatePauseButton();
+}
+
+function updatePauseButton() {
+  const btn = document.getElementById('twin-pause-btn');
+  if (!btn) return;
+  btn.textContent = userPaused ? '▶ Play' : '⏸ Pause';
+  btn.setAttribute('aria-pressed', String(userPaused));
+}
+
+function updateEngineBadge(stats) {
+  const badge = document.getElementById('twin-engine-badge');
+  if (!badge || !stats) return;
+  if (stats.mode === 'webgl2') {
+    const label = stats.paused
+      ? 'WebGL2 EMBER · Paused'
+      : stats.scale < 0.99
+        ? `WebGL2 EMBER · ${stats.fps} FPS (${Math.round(stats.scale * 100)}%)`
+        : `WebGL2 EMBER · ${stats.fps} FPS`;
+    badge.textContent = label;
+  } else {
+    badge.textContent = stats.paused ? 'Canvas2D · Paused' : `Canvas2D · ${stats.fps} FPS`;
+  }
+}
+
 export async function initFlameTwin() {
   const canvas = document.getElementById('flame-canvas');
   if (!canvas) return;
 
-  renderer = new FlameRenderer(canvas);
-  const engineBadge = document.getElementById('twin-engine-badge');
-  if (engineBadge) {
-    engineBadge.textContent = renderer.mode === 'webgl2' ? 'WebGL2 Raymarcher (44-step)' : 'Canvas2D Volumetric';
+  // Respect prefers-reduced-motion cleanly
+  if (typeof window.matchMedia === 'function') {
+    const mq = window.matchMedia('(prefers-reduced-motion: reduce)');
+    if (mq.matches) userPaused = true;
   }
+
+  renderer = new FlameRenderer(canvas, {
+    onStats: (stats) => updateEngineBadge(stats),
+  });
+  updateEngineBadge(renderer.getStats());
 
   renderScenePills();
   renderFuelPills();
@@ -44,12 +94,35 @@ export async function initFlameTwin() {
 
   applyTwinPhysics();
 
+  // Pause automatically when scrolled out of viewport while Twin tab is active
+  if (typeof IntersectionObserver !== 'undefined') {
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (!isTwinTabActive) return;
+        for (const entry of entries) {
+          isCanvasVisible = entry.isIntersecting;
+        }
+        syncPlaybackState();
+      },
+      { threshold: 0.05 }
+    );
+    io.observe(canvas);
+  }
+
+  // Pause automatically when browser tab is backgrounded
+  document.addEventListener('visibilitychange', () => {
+    syncPlaybackState();
+  });
+
   on('tab:changed', (tab) => {
-    if (tab === 'twin') {
-      renderer.start();
-      if (ventChart) ventChart.resize();
-    } else {
-      renderer.stop();
+    isTwinTabActive = tab === 'twin';
+    if (isTwinTabActive) isCanvasVisible = true;
+    syncPlaybackState();
+    if (isTwinTabActive) {
+      requestAnimationFrame(() => {
+        if (ventChart) ventChart.resize();
+        if (userPaused) renderer?.renderFrame();
+      });
     }
   });
 
@@ -58,7 +131,6 @@ export async function initFlameTwin() {
   });
 
   on('cabin:changed', (cabin) => {
-    // Allow user to pull active cabin quickly; keep twin synced if user clicks sync
     const hint = document.getElementById('twin-sync-hint');
     if (hint) {
       hint.textContent = `Cabin: ${cabin.oxygen_pct}% O₂ · ${cabin.gravity_g}g · ${cabin.flow_velocity_cm_s} cm/s`;
@@ -92,7 +164,7 @@ function renderScenePills() {
       renderScenePills();
       renderFuelPills();
       renderer?.triggerIgnite();
-      applyTwinPhysics();
+      schedulePhysicsUpdate();
     });
   });
 }
@@ -112,8 +184,16 @@ function renderFuelPills() {
     btn.addEventListener('click', () => {
       twinState.fuelMode = btn.dataset.fuel;
       renderFuelPills();
-      applyTwinPhysics();
+      schedulePhysicsUpdate();
     });
+  });
+}
+
+function schedulePhysicsUpdate() {
+  if (pendingPhysicsRaf !== null) return;
+  pendingPhysicsRaf = requestAnimationFrame(() => {
+    pendingPhysicsRaf = null;
+    applyTwinPhysics();
   });
 }
 
@@ -129,7 +209,7 @@ function bindControls() {
       if (key === 'speed') {
         renderer?.setSpeed(twinState.speed);
       } else {
-        applyTwinPhysics();
+        schedulePhysicsUpdate();
       }
     });
   };
@@ -142,6 +222,16 @@ function bindControls() {
 
   document.getElementById('twin-ignite-btn')?.addEventListener('click', () => {
     renderer?.triggerIgnite();
+    if (userPaused) {
+      userPaused = false;
+      syncPlaybackState();
+    }
+  });
+
+  document.getElementById('twin-pause-btn')?.addEventListener('click', () => {
+    userPaused = !userPaused;
+    syncPlaybackState();
+    if (renderer) updateEngineBadge(renderer.getStats());
   });
 
   document.getElementById('twin-pull-cabin-btn')?.addEventListener('click', () => {
@@ -153,7 +243,7 @@ function bindControls() {
     twinState.sceneId = 'custom';
     syncInputsFromState();
     renderer?.triggerIgnite();
-    applyTwinPhysics();
+    schedulePhysicsUpdate();
   });
 
   document.getElementById('twin-push-cabin-btn')?.addEventListener('click', () => {
@@ -171,6 +261,8 @@ function bindControls() {
     const q = `Explain the flame physics and NASA safety implications for a ${twinState.gravityG}g environment at ${twinState.oxygenPct}% O2, ${twinState.pressureKpa} kPa, and ${twinState.flowCmS} cm/s forced ventilation (${vis.regime}).`;
     emit('chat:ask', q);
   });
+
+  updatePauseButton();
 }
 
 function syncInputsFromState() {
@@ -192,7 +284,7 @@ function applyTwinPhysics() {
 
   const setText = (id, text) => {
     const el = document.getElementById(id);
-    if (el) el.textContent = text;
+    if (el && el.textContent !== text) el.textContent = text;
   };
   setText('hud-regime', vis.regime);
   setText('hud-temp', `${vis.tempK} K`);
@@ -202,16 +294,18 @@ function applyTwinPhysics() {
 
   const regimeBadge = document.getElementById('hud-regime-badge');
   if (regimeBadge) {
-    regimeBadge.className = `badge risk-${vis.regimeBadge}`;
-    regimeBadge.textContent = vis.regime;
+    const cls = `badge risk-${vis.regimeBadge}`;
+    if (regimeBadge.className !== cls) regimeBadge.className = cls;
+    if (regimeBadge.textContent !== vis.regime) regimeBadge.textContent = vis.regime;
   }
 
   const desc = document.getElementById('twin-scene-desc');
   if (desc) {
     const sc = FLAME_SCENES.find((x) => x.id === twinState.sceneId);
-    desc.textContent = sc
+    const nextDesc = sc
       ? sc.description
       : `Custom state: v_buoyant = ${vis.vBuoyant} cm/s, v_forced = ${twinState.flowCmS} cm/s → v_eff = ${vis.vEff} cm/s.`;
+    if (desc.textContent !== nextDesc) desc.textContent = nextDesc;
   }
 
   updateVentilationMarker(vis.vEff);
@@ -225,10 +319,11 @@ function renderVentilationChart() {
   const colors = chartThemeColors();
   const pts = ventCurveData.points || [];
   const vis = computeFlameVisuals(twinState);
+  lastChartVEff = vis.vEff;
 
-  // Interpolate current point on curve
-  const nearest = pts.reduce((best, p) =>
-    Math.abs(p.velocity_cm_s - vis.vEff) < Math.abs(best.velocity_cm_s - vis.vEff) ? p : best,
+  const nearest = pts.reduce(
+    (best, p) =>
+      Math.abs(p.velocity_cm_s - vis.vEff) < Math.abs(best.velocity_cm_s - vis.vEff) ? p : best,
     pts[0] || { velocity_cm_s: 8, loi_shift_pct: -2.0 }
   );
 
@@ -260,6 +355,7 @@ function renderVentilationChart() {
     options: {
       responsive: true,
       maintainAspectRatio: false,
+      animation: false,
       scales: {
         x: {
           type: 'linear',
@@ -290,12 +386,14 @@ function renderVentilationChart() {
 }
 
 function updateVentilationMarker(vEff) {
-  if (!ventChart || !ventCurveData) return;
+  if (!ventChart || !ventCurveData || vEff === lastChartVEff) return;
+  lastChartVEff = vEff;
   const pts = ventCurveData.points || [];
   if (!pts.length) return;
   const clamped = Math.min(40, vEff);
-  const nearest = pts.reduce((best, p) =>
-    Math.abs(p.velocity_cm_s - clamped) < Math.abs(best.velocity_cm_s - clamped) ? p : best,
+  const nearest = pts.reduce(
+    (best, p) =>
+      Math.abs(p.velocity_cm_s - clamped) < Math.abs(best.velocity_cm_s - clamped) ? p : best,
     pts[0]
   );
   ventChart.data.datasets[1].data = [{ x: clamped, y: nearest.loi_shift_pct }];

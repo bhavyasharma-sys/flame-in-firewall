@@ -1,4 +1,4 @@
-const CACHE_NAME = 'flame-freefall-v3';
+const CACHE_NAME = 'flame-freefall-v4';
 const ASSETS = [
   '/',
   '/manifest.json',

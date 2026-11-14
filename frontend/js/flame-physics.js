@@ -1,5 +1,5 @@
 /**
- * Visual Flame Physics & NASA Mission Presets for the 3D WebGL2 Flame Twin.
+ * Visual Flame Physics & NASA Mission Presets for the 3D WebGL2 EMBER Flame Twin.
  * Calibrated from NASA BASS-II, FLEX-2, SAFFIRE, and ACME microgravity research.
  */
 
@@ -62,42 +62,52 @@ export const FLAME_SCENES = [
 ];
 
 export const FUEL_MODES = [
-  { id: 'droplet', label: 'Droplet (FLEX)', index: 0 },
-  { id: 'gaseous', label: 'Gas Jet (ACME)', index: 1 },
-  { id: 'rod', label: 'PMMA Rod (BASS-II)', index: 2 },
-  { id: 'sheet', label: 'Flat Sheet (SAFFIRE)', index: 3 },
+  { id: 'droplet', label: 'Droplet (FLEX)', index: 0, geomScale: [1.0, 1.0, 1.0] },
+  { id: 'gaseous', label: 'Gas Jet (ACME)', index: 1, geomScale: [0.80, 1.20, 0.80] },
+  { id: 'rod', label: 'PMMA Rod (BASS-II)', index: 2, geomScale: [0.78, 1.25, 0.86] },
+  { id: 'sheet', label: 'Flat Sheet (SAFFIRE)', index: 3, geomScale: [1.40, 0.86, 0.65] },
 ];
 
+const clamp = (x, lo, hi) => Math.min(hi, Math.max(lo, x));
+
 export function computeFlameVisuals(params) {
-  const g = Math.max(0, Math.min(2.0, Number(params.gravityG ?? 0)));
-  const o2 = Math.max(10, Math.min(50, Number(params.oxygenPct ?? 21)));
-  const flow = Math.max(0, Math.min(40, Number(params.flowCmS ?? 8)));
-  const pressure = Math.max(30, Math.min(150, Number(params.pressureKpa ?? 101.3)));
+  const g = clamp(Number(params.gravityG ?? 0), 0, 2.0);
+  const o2 = clamp(Number(params.oxygenPct ?? 21), 10, 50);
+  const flow = clamp(Number(params.flowCmS ?? 8), 0, 40);
+  const pressure = clamp(Number(params.pressureKpa ?? 101.3), 30, 150);
   const fuelMode = params.fuelMode || 'droplet';
 
-  const buoyancy = Math.min(1.0, Math.pow(g / 1.0, 0.58));
-  const vBuoyant = 18.0 * Math.sqrt(g);
+  // Buoyancy velocity scales with sqrt(g) and weak pressure density term
+  const vBuoyant = 18.0 * Math.sqrt(g) * Math.pow(pressure / 101.3, 0.25);
   const vEff = Math.hypot(vBuoyant, flow);
+  const buoyancy = clamp(Math.pow(g / 1.0, 0.58), 0, 1);
+  const shapeBf = clamp(vBuoyant / 22.0, 0, 1);
 
-  // Oxygen vigor factor
-  const o2Factor = Math.max(0.15, Math.min(1.85, (o2 - 12.5) / 11.5));
-  const pFactor = Math.max(0.55, Math.min(1.35, Math.pow(pressure / 101.3, 0.35)));
+  // Oxygen vigor & pressure scaling (EMBER-calibrated)
+  const o2Factor = clamp((o2 - 12.5) / 11.5, 0.15, 1.85);
+  const pFactor = clamp(Math.pow(pressure / 101.3, 0.35), 0.55, 1.35);
+  const pressureSizeScale = clamp(Math.pow(101.3 / Math.max(pressure, 20), 0.18), 0.78, 1.30);
 
   // Cool flame transition in microgravity + low O2 + low flow
   const isCool = g < 0.08 && o2 <= 18.2 && flow <= 5.5;
   const isExtinguished = o2 < 13.5 || (g < 0.05 && flow > 32 && o2 < 20);
+  const isQuiescent = !isExtinguished && !isCool && g < 0.05 && flow < 1.5 && o2 < 22;
 
   let regime = 'Sustained Diffusion Flame';
   let regimeBadge = 'HIGH';
+  let regimeKind = 'sustained';
   if (isExtinguished) {
     regime = 'Extinguished / Blow-Off';
     regimeBadge = 'LOW';
+    regimeKind = 'extinguished';
   } else if (isCool) {
     regime = 'Cool Flame (FLEX-2 ~650 K)';
     regimeBadge = 'MODERATE';
-  } else if (g < 0.05 && flow < 1.5 && o2 < 22) {
+    regimeKind = 'cool';
+  } else if (isQuiescent) {
     regime = 'Quiescent Radiative Decay';
     regimeBadge = 'LOW';
+    regimeKind = 'quiescent';
   } else if (o2 >= 30) {
     regime = 'Enriched-O₂ Rapid Spread';
     regimeBadge = 'CRITICAL';
@@ -106,23 +116,29 @@ export function computeFlameVisuals(params) {
     regimeBadge = 'HIGH';
   }
 
-  // Soot luminance (higher in 1g and higher O2, suppressed in 0g blue flame & cool flame)
+  // Soot dominance (suppressed in 0g blue diffusion shell & cool flame, rich in 1g / enriched O2)
   const soot = isExtinguished
     ? 0.0
     : isCool
-      ? 0.04
-      : Math.max(0.05, Math.min(1.0, (0.14 + 0.72 * buoyancy) * Math.min(1.35, o2Factor) * pFactor));
+      ? 0.02
+      : clamp((0.12 + 0.78 * shapeBf) * Math.min(1.35, o2Factor) * pFactor, 0.04, 1.0);
 
   const intensity = isExtinguished
     ? 0.05
     : isCool
-      ? 0.52
-      : Math.max(0.25, Math.min(1.45, o2Factor * (0.72 + 0.28 * pFactor)));
+      ? 0.62
+      : clamp(o2Factor * (0.74 + 0.26 * pFactor), 0.28, 1.45);
+
+  // EMBER flame scale factor
+  let scale = clamp(0.76 + (o2Factor - 0.55) * 0.34, 0.58, 1.28) * pressureSizeScale;
+  if (isCool) scale *= 1.08;
+  if (isQuiescent) scale = Math.min(scale, 0.84);
+  if (isExtinguished) scale = 0.62;
 
   const heightMm = isExtinguished
     ? 0
     : isCool
-      ? 14 + flow * 0.4
+      ? Math.round(14 + flow * 0.4)
       : Math.round((24 + 54 * buoyancy + 14 * Math.max(0, o2Factor - 0.6)) * pFactor);
 
   const tempK = isExtinguished
@@ -131,23 +147,33 @@ export function computeFlameVisuals(params) {
       ? Math.round(620 + (o2 - 14) * 28)
       : Math.round(1380 + 480 * Math.min(1.3, o2Factor) + 140 * buoyancy);
 
-  const sootYield = isExtinguished
-    ? 0.0
-    : Number((soot * 100).toFixed(0));
+  const sootYield = isExtinguished ? 0 : Number((soot * 100).toFixed(0));
 
-  const windNorm = Math.min(1.0, flow / 26.0);
-  const fuelIndex = FUEL_MODES.find((f) => f.id === fuelMode)?.index ?? 0;
+  const windNorm = clamp(flow / 26.0, 0, 1.35);
+  const windX = windNorm * 0.36;
+  const windY = 0.0;
+  const flowDirX = flow > 0.25 ? 1.0 : 0.0;
+
+  const fuelDef = FUEL_MODES.find((f) => f.id === fuelMode) || FUEL_MODES[0];
 
   return {
     buoyancy,
+    shapeBf,
     vBuoyant: Number(vBuoyant.toFixed(1)),
     vEff: Number(vEff.toFixed(1)),
     soot,
+    sootDom: soot,
     intensity,
+    scale,
     isCool: isCool ? 1.0 : 0.0,
     isExtinguished,
-    windNorm,
-    fuelIndex,
+    regimeKind,
+    windNorm: Math.min(1.0, windNorm),
+    windX,
+    windY,
+    flowDirX,
+    fuelIndex: fuelDef.index,
+    geomScale: fuelDef.geomScale,
     regime,
     regimeBadge,
     heightMm,
