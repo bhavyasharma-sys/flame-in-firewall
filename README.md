@@ -82,7 +82,6 @@ python -m unittest discover -s tests -v
 ├── utils/                    # Unified KB/EMBER/Markdown data loader & formatting helpers
 ├── data/
 │   ├── knowledge_base/       # Structured NASA JSON datasets (experiments, materials, findings, guidelines, brief)
-│   ├── raw/                  # Raw Space Apps challenge brief
 │   └── ember/                # 50 proxy runs, telemetry curves, 5 habitat presets, 12 NASA Markdown papers
 ├── frontend/
 │   ├── index.html            # 8-view responsive Mission-Control UI

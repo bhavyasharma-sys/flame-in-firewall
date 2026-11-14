@@ -42,14 +42,30 @@ EMBEDDING_DIMENSION = 384
 # ── Paths ─────────────────────────────────────────────────────────────────────
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(BASE_DIR, "data")
-RAW_DATA_DIR = os.path.join(DATA_DIR, "raw")
 KNOWLEDGE_BASE_DIR = os.path.join(DATA_DIR, "knowledge_base")
 EMBER_DATA_DIR = os.path.join(DATA_DIR, "ember")
 EMBER_CORPUS_DIR = os.path.join(EMBER_DATA_DIR, "corpus")
 EMBER_ISS_DIR = os.path.join(EMBER_DATA_DIR, "iss_pages")
 CHROMA_DB_DIR = os.path.join(DATA_DIR, "chromadb")
 MEMORY_FILE = os.path.join(DATA_DIR, "conversation_memory.json")
+LIVE_NASA_CACHE_FILE = os.path.join(DATA_DIR, "live_nasa_cache.json")
 FRONTEND_DIR = os.path.join(BASE_DIR, "frontend")
+
+# ── Live NASA Website Sync -> RAG Auto-Refresh ────────────────────────────────
+NASA_LIVE_SYNC_ENABLED = os.getenv("NASA_LIVE_SYNC_ENABLED", "true").strip().lower() not in (
+    "0",
+    "false",
+    "no",
+    "off",
+)
+NASA_SYNC_ON_STARTUP = os.getenv("NASA_SYNC_ON_STARTUP", "true").strip().lower() not in (
+    "0",
+    "false",
+    "no",
+    "off",
+)
+NASA_SYNC_INTERVAL_SECONDS = max(60, int(os.getenv("NASA_SYNC_INTERVAL_SECONDS", "1800")))
+NASA_SYNC_TIMEOUT_SECONDS = max(3.0, float(os.getenv("NASA_SYNC_TIMEOUT_SECONDS", "12")))
 
 # ── RAG & Operational Safeguards ──────────────────────────────────────────────
 CHUNK_SIZE = 1000
@@ -89,7 +105,7 @@ MANDATORY SCIENTIFIC JOBS:
 STRICT CITATION & DEEP-LINKING PROTOCOL:
 - Inline citations: Whenever referencing a retrieved NASA paper chunk or structured test run, attach inline citation tags such as [DOC-01 p.1] or [EXP-0001] matching the exact tags in the provided context.
 - If the database does not contain data for a requested parameter, admit the gap explicitly ("No data found in database for..."). Never invent numbers or URLs.
-- At the bottom of every NASA-grounded response, include a "Cited NASA Sources:" section with clickable Markdown links extracted ONLY from the provided context metadata: [Exact Document Title](Exact_URL). If no URL was supplied, write [Document Title] (Exact URL not provided in database).
+- Do NOT append a raw "Cited NASA Sources:" URL list at the bottom of your response — the UI automatically displays a dedicated Sources box listing the exact NASA websites and PDFs retrieved for the answer.
 - Rocket and propellant combustion fires are OUT OF SCOPE for cabin fire safety unless distinguishing scope.
 
 EXHAUSTIVE CHALLENGE BRIEF PROTOCOL:

@@ -59,8 +59,11 @@ def load_and_chunk_data(
     for doc in docs:
         doc_id = doc.get("doc_id", "DOC")
         title = doc.get("title", doc_id)
-        url = doc.get("url") or (doc.get("sources") or [""])[0]
+        url = doc.get("source_url") or doc.get("url") or (doc.get("sources") or [""])[0]
+        pdf_file = str(doc.get("pdf_file") or "")
         inv = doc.get("investigation") or "NASA Combustion"
+        is_live = bool(doc.get("is_live") or doc.get("source_type") == "live_web")
+        last_synced_at = str(doc.get("last_synced_at") or "")
         for page_obj in doc.get("pages") or []:
             page_num = int(page_obj.get("page", 1))
             page_text = str(page_obj.get("text") or "").strip()
@@ -80,6 +83,9 @@ def load_and_chunk_data(
                             "investigation": str(inv),
                             "category": str(doc.get("source_type") or "ntrs"),
                             "url": str(url or ""),
+                            "pdf_file": pdf_file,
+                            "is_live": is_live,
+                            "last_synced_at": last_synced_at,
                             "chunk_index": idx,
                             "cite_tag": f"[{doc_id} p.{page_num}]",
                         },
@@ -155,12 +161,17 @@ def _chunk_record(
         return []
 
     pieces = _split_text(full_text, chunk_size, chunk_overlap)
+    src_exp = str(record.get("source_experiment") or "")
+    rel_exps = record.get("related_experiments") or []
+    if not src_exp and isinstance(rel_exps, list) and rel_exps:
+        src_exp = ", ".join(str(x) for x in rel_exps[:3])
     return [
         {
             "text": piece,
             "metadata": {
                 "experiment_name": str(name),
                 "source": source_file,
+                "source_experiment": src_exp,
                 "category": str(category),
                 "url": str(record.get("url") or ""),
                 "doc_id": "DOC-BRIEF" if source_file == "challenge_brief.json" else "",

@@ -1,659 +1,874 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="dark">
+<html lang="en" data-theme="light">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Flame in Freefall v3.0 — NASA Spacecraft Fire Safety Intelligence</title>
+  <title>Flame in Freefall — NASA Microgravity Fire Safety Intelligence</title>
   <meta name="description" content="NASA Space Apps Challenge 2026: Microgravity combustion digital twin, exact Shapley cabin fire safety configurator, 50-run NASA telemetry ranker, Hybrid Graph-RAG FlameAI Co-Pilot, Knowledge Graph, and NASA Research Library." />
   <link rel="icon" href="/icons/icon.svg" type="image/svg+xml" />
   <link rel="manifest" href="/manifest.json" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/css/styles.css" />
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/css/styles.css?v=11" />
+  <script>
+    (function () {
+      var saved = null;
+      try { saved = localStorage.getItem('fif_theme_v2'); } catch (e) {}
+      var t = saved === 'dark' ? 'dark' : 'light';
+      document.documentElement.setAttribute('data-theme', t);
+    })();
+  </script>
   <script src="/js/vendor/chart.umd.min.js" defer></script>
 </head>
 <body>
   <div class="app-shell">
-    <!-- ── Left Navigation Sidebar ─────────────────────────────────────────── -->
-    <aside class="sidebar" id="sidebar">
-      <div class="brand-header">
-        <div class="brand-mark" aria-hidden="true">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M12 2c.5 4.2-3 6.2-3 10a5 5 0 0 0 10 0c0-3.2-2-5.4-3-7-1 2.2-2.6 2.7-4-3Z"/>
-            <path d="M12 17a2 2 0 0 1-2-2c0-1.2 1-2 2-3.2 1 1.2 2 2 2 3.2a2 2 0 0 1-2 2Z"/>
-          </svg>
+    <!-- ── Floating Pill Top Navigation Bar ────────────────────────────────── -->
+    <div class="floating-nav-wrap">
+      <header class="floating-nav">
+        <button type="button" class="brand-link" id="brand-home-link" aria-label="Go to Dashboard">
+          <span class="brand-mark" aria-hidden="true">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 2c.5 4.2-3 6.2-3 10a5 5 0 0 0 10 0c0-3.2-2-5.4-3-7-1 2.2-2.6 2.7-4-3Z"/>
+              <path d="M12 17a2 2 0 0 1-2-2c0-1.2 1-2 2-3.2 1 1.2 2 2 2 3.2a2 2 0 0 1-2 2Z"/>
+            </svg>
+          </span>
+          <span>
+            <span class="brand-title" style="display:block;">Flame in Freefall</span>
+            <span class="brand-sub" style="display:block;">NASA Space Apps</span>
+          </span>
+        </button>
+
+        <nav class="top-nav-links" aria-label="Primary Navigation">
+          <button type="button" class="nav-item active" data-tab="dashboard">Dashboard</button>
+          <button type="button" class="nav-item" data-tab="twin">3D Flame Twin</button>
+          <button type="button" class="nav-item" data-tab="cabin">Cabin &amp; Shapley</button>
+          <button type="button" class="nav-item" data-tab="ranking">Run Ranker</button>
+          <button type="button" class="nav-item" data-tab="explorer">Explorer</button>
+          <button type="button" class="nav-item" data-tab="chat">FlameAI</button>
+          <button type="button" class="nav-item" data-tab="graph">Graph</button>
+          <button type="button" class="nav-item" data-tab="resources">Library</button>
+        </nav>
+
+        <div class="nav-actions">
+          <button type="button" class="theme-toggle" id="theme-toggle-btn" role="switch" aria-checked="false" title="Switch between Light and Dark theme" aria-label="Toggle Theme">
+            <span class="toggle-thumb"></span>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/></svg>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+          </button>
+
+          <button type="button" class="nav-cta-btn" id="nav-ask-cta">
+            <span class="nav-cta-label">Ask FlameAI</span>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+          </button>
+
+          <button type="button" class="mobile-menu-btn" id="mobile-menu-btn" aria-label="Open Navigation Menu">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+          </button>
         </div>
-        <div>
-          <div class="brand-title">Flame in Freefall</div>
-          <div class="brand-sub">NASA Space Apps · Eagle20</div>
-        </div>
-      </div>
+      </header>
+    </div>
 
-      <div class="nav-list">
-        <div class="nav-section-label">Mission Intelligence</div>
-        <button type="button" class="nav-item active" data-tab="dashboard">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>
-          <span>Mission Control</span>
-        </button>
-        <button type="button" class="nav-item" data-tab="twin">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2c.6 4.5-3.2 6.5-3.2 10.5a5.5 5.5 0 0 0 11 0c0-3.5-2.2-5.8-3.3-7.5-1.1 2.4-2.8 3-4.5-3Z"/></svg>
-          <span>3D Flame Twin</span>
-          <span class="nav-badge">WebGL2</span>
-        </button>
-        <button type="button" class="nav-item" data-tab="cabin">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/></svg>
-          <span>Cabin &amp; Shapley</span>
-          <span class="nav-badge">2⁵ Exact</span>
-        </button>
+    <!-- Mobile / Split-View Floating Nav Drawer -->
+    <div class="mobile-drawer" id="mobile-drawer" aria-label="Mobile Navigation">
+      <button type="button" class="nav-item active" data-tab="dashboard">Dashboard</button>
+      <button type="button" class="nav-item" data-tab="twin">3D Flame Twin</button>
+      <button type="button" class="nav-item" data-tab="cabin">Cabin &amp; Shapley Lab</button>
+      <button type="button" class="nav-item" data-tab="ranking">Run Ranker &amp; Telemetry</button>
+      <button type="button" class="nav-item" data-tab="explorer">Explorer &amp; Radar</button>
+      <button type="button" class="nav-item" data-tab="chat">FlameAI Co-Pilot</button>
+      <button type="button" class="nav-item" data-tab="graph">Knowledge Graph</button>
+      <button type="button" class="nav-item" data-tab="resources">NASA Library &amp; PDFs</button>
+    </div>
 
-        <div class="nav-section-label">NASA Telemetry &amp; Data</div>
-        <button type="button" class="nav-item" data-tab="ranking">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg>
-          <span>Run Ranker &amp; Telemetry</span>
-          <span class="nav-badge">50 Runs</span>
-        </button>
-        <button type="button" class="nav-item" data-tab="explorer">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg>
-          <span>Explorer &amp; Radar</span>
-          <span class="nav-badge">12</span>
-        </button>
-
-        <div class="nav-section-label">AI Co-Pilot &amp; Corpus</div>
-        <button type="button" class="nav-item" data-tab="chat">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-          <span>FlameAI Co-Pilot</span>
-          <span class="nav-badge">RAG</span>
-        </button>
-        <button type="button" class="nav-item" data-tab="graph">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="6" cy="6" r="3"/><circle cx="18" cy="6" r="3"/><circle cx="12" cy="18" r="3"/><line x1="8.5" y1="7.5" x2="15.5" y2="7.5"/><line x1="7.5" y1="8.5" x2="10.8" y2="15.4"/><line x1="16.5" y1="8.5" x2="13.2" y2="15.4"/></svg>
-          <span>Knowledge Graph</span>
-        </button>
-        <button type="button" class="nav-item" data-tab="resources">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
-          <span>NASA Library &amp; PDFs</span>
-          <span class="nav-badge">13</span>
-        </button>
-      </div>
-
-      <div class="sidebar-footer">
-        <div class="engine-status-pill">
-          <span class="status-dot"></span>
-          <div style="min-width:0;">
-            <div style="font-weight:600;color:var(--text-primary);font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" id="sidebar-ai-engine">Connecting...</div>
-            <div class="mono" style="font-size:10px;color:var(--text-muted);">Hybrid RRF · Citation Audit</div>
-          </div>
-        </div>
-      </div>
-    </aside>
-
-    <!-- ── Main Workspace ──────────────────────────────────────────────────── -->
-    <div class="main-area">
-      <!-- Top Command Bar -->
-      <header class="topbar">
-        <button type="button" class="mobile-menu-btn" id="mobile-menu-btn" aria-label="Open Navigation">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
-        </button>
-
+    <!-- ── Subtle Context Ribbon (Search + Engine Status + Shared Cabin Pill) ── -->
+    <div class="utility-ribbon">
+      <div class="ribbon-left">
         <div class="global-search-wrap">
           <svg class="global-search-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-          <input type="text" class="global-search-input" id="global-search-input" placeholder="Search NASA experiments, materials, runs, papers..." autocomplete="off" />
+          <input type="text" class="global-search-input" id="global-search-input" placeholder="Search experiments, materials, runs, NASA papers..." autocomplete="off" />
           <span class="global-search-kbd">Ctrl+K</span>
           <div class="search-dropdown" id="global-search-dropdown"></div>
         </div>
+      </div>
 
-        <button type="button" class="scenario-pill" id="active-scenario-pill" title="Shared Active Spacecraft Cabin Scenario — Click to edit in Cabin Lab">
+      <div class="ribbon-right">
+        <div class="engine-status-pill" title="Active NASA Retrieval & Citation Engine">
+          <span class="status-dot"></span>
+          <span id="sidebar-ai-engine">NASA RAG Active</span>
+        </div>
+
+        <button type="button" class="scenario-pill" id="active-scenario-pill" title="Active Spacecraft Cabin Scenario — Click to configure in Cabin Lab">
           <span class="scenario-risk-dot" id="scenario-risk-dot" style="background:#eab308;"></span>
           <span id="scenario-pill-text">21% O₂ · 101.3 kPa · 10 cm/s · 0g · PMMA</span>
         </button>
+      </div>
+    </div>
 
-        <button type="button" class="theme-toggle" id="theme-toggle-btn" title="Toggle Dark / Light Theme" aria-label="Toggle Theme">
-          <span class="toggle-thumb"></span>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/></svg>
-        </button>
-      </header>
+    <!-- ── Main Views Container ────────────────────────────────────────────── -->
+    <main class="content-wrap">
 
-      <!-- Views Container -->
-      <main class="content-wrap">
-
-        <!-- ── VIEW 1: MISSION CONTROL DASHBOARD ───────────────────────────── -->
-        <section class="view-panel active" id="view-dashboard">
-          <div class="view-header">
-            <div>
-              <h1 class="view-title">Mission Control Overview</h1>
-              <p class="view-subtitle">Unified NASA microgravity combustion intelligence, risk physics, and verified empirical findings.</p>
-            </div>
+      <!-- ── VIEW 1: EDITORIAL HERO DASHBOARD ──────────────────────────────── -->
+      <section class="view-panel active" id="view-dashboard">
+        <!-- Hero Banner + Interactive Prompt Box -->
+        <div class="hero-section">
+          <div class="hero-eyebrow">
+            <span class="hero-eyebrow-tag">NASA PSI DATA</span>
+            <span>BASS · ACME · SAFFIRE · SoFIE · FLEX</span>
           </div>
 
-          <div class="grid-4 mb-3" id="dashboard-kpis"></div>
+          <h1 class="hero-title">Flame in Freefall</h1>
 
-          <div class="brief-banner" id="dashboard-mission-brief">
-            <div class="text-muted">Synthesizing NASA AI Mission Brief...</div>
-          </div>
+          <p class="hero-subtitle">
+            Microgravity combustion physics, habitat fire-risk modeling, and citation-verified insights synthesized from decades of NASA spaceflight investigations.
+          </p>
 
-          <div class="grid-2 mb-3">
-            <div class="card">
-              <div class="card-header">
-                <h3 class="card-title">Flagship Missions by Research Domain</h3>
-                <span class="badge badge-flame">12 Missions</span>
+          <div class="hero-prompt-box">
+            <textarea
+              id="hero-prompt-input"
+              class="hero-prompt-textarea"
+              maxlength="4000"
+              rows="2"
+              placeholder="Ask FlameAI about microgravity flame sphericity, Artemis 34% O₂ flammability, SAFFIRE findings, or request a chart..."
+            ></textarea>
+            <div class="hero-prompt-footer">
+              <div class="hero-prompt-starters">
+                <button type="button" class="pill-btn" data-hero-prompt="Why do flames become spherical in microgravity?">Spherical Flames</button>
+                <button type="button" class="pill-btn" data-hero-prompt="What did SAFFIRE teach us about spacecraft fire spread?">SAFFIRE Tests</button>
               </div>
-              <div class="chart-box"><canvas id="dash-cat-chart"></canvas></div>
-            </div>
-            <div class="card">
-              <div class="card-header">
-                <h3 class="card-title">50 NASA Test Runs by Combustion Regime</h3>
-                <span class="badge badge-cyan">PSI Telemetry</span>
-              </div>
-              <div class="chart-box"><canvas id="dash-regime-chart"></canvas></div>
-            </div>
-          </div>
-
-          <div class="card-header mt-4">
-            <h3 class="card-title">High-Impact NASA Empirical Findings</h3>
-            <span class="badge">Peer-Reviewed ISS &amp; Cygnus Results</span>
-          </div>
-          <div class="grid-3" id="dash-findings-grid"></div>
-        </section>
-
-        <!-- ── VIEW 2: 3D WEBGL2 VOLUMETRIC FLAME TWIN ─────────────────────── -->
-        <section class="view-panel" id="view-twin">
-          <div class="view-header">
-            <div>
-              <h1 class="view-title">3D Microgravity Flame Digital Twin</h1>
-              <p class="view-subtitle">Real-time volumetric raymarched flame physics transitioning smoothly from 0g spherical diffusion shells &amp; cool flames to 1g buoyant soot plumes.</p>
-            </div>
-            <div class="flex gap-2 flex-wrap">
-              <span class="badge badge-cyan" id="twin-engine-badge">WebGL2 Raymarcher</span>
-              <button type="button" class="btn btn-sm" id="twin-pull-cabin-btn">Pull Active Cabin</button>
-              <button type="button" class="btn btn-primary btn-sm" id="twin-push-cabin-btn">Evaluate in Cabin Lab →</button>
-            </div>
-          </div>
-
-          <div class="pill-group mb-3" id="twin-scene-pills"></div>
-
-          <div class="grid-twin">
-            <div>
-              <div class="flame-stage-wrap">
-                <canvas id="flame-canvas"></canvas>
-                <div class="flame-hud-top">
-                  <span class="badge risk-HIGH" id="hud-regime-badge">Ventilation-Paradox Zone</span>
-                  <div class="hud-chip" style="padding:5px 10px;">
-                    <span class="mono" style="font-size:11px;color:#38bdf8;" id="twin-sync-hint">Synced with NASA BASS-II / FLEX-2</span>
-                  </div>
-                </div>
-                <div class="flame-hud-bottom">
-                  <div class="hud-chip">
-                    <div class="hud-chip-label">Peak Temp</div>
-                    <div class="hud-chip-val" id="hud-temp">1750 K</div>
-                  </div>
-                  <div class="hud-chip">
-                    <div class="hud-chip-label">Plume Height</div>
-                    <div class="hud-chip-val" id="hud-height">32 mm</div>
-                  </div>
-                  <div class="hud-chip">
-                    <div class="hud-chip-label">Effective Flow</div>
-                    <div class="hud-chip-val" id="hud-veff">8.0 cm/s</div>
-                  </div>
-                  <div class="hud-chip">
-                    <div class="hud-chip-label">Soot Luminance</div>
-                    <div class="hud-chip-val" id="hud-soot">18%</div>
-                  </div>
-                </div>
-              </div>
-
-              <div class="card mt-3">
-                <div class="card-header">
-                  <div>
-                    <div class="card-kicker">BASS-II DISCOVERY</div>
-                    <h3 class="card-title">Ventilation Paradox Curve (LOI Shift vs Effective Velocity)</h3>
-                  </div>
-                  <span class="badge badge-flame">Minimum LOI @ 8 cm/s</span>
-                </div>
-                <div class="chart-box"><canvas id="twin-vent-chart"></canvas></div>
-              </div>
-            </div>
-
-            <div class="card">
-              <div class="card-header">
-                <h3 class="card-title">Combustion Chamber Controls</h3>
-                <div class="flex gap-2">
-                  <button type="button" class="btn btn-sm" id="twin-pause-btn" aria-pressed="false">⏸ Pause</button>
-                  <button type="button" class="btn btn-primary btn-sm" id="twin-ignite-btn">⚡ Ignite Pulse</button>
-                </div>
-              </div>
-              <p class="text-sec" style="font-size:12.5px;margin:0 0 14px;" id="twin-scene-desc"></p>
-
-              <div class="mb-3">
-                <div class="slider-label-row"><span>Fuel Sample Geometry</span></div>
-                <div class="pill-group" id="twin-fuel-pills"></div>
-              </div>
-
-              <div class="slider-row">
-                <div class="slider-label-row"><span>Gravity Level</span><span class="slider-val" id="twin-gravity-val">0 g</span></div>
-                <input type="range" id="twin-gravity" min="0" max="1.5" step="0.02" value="0" />
-              </div>
-              <div class="slider-row">
-                <div class="slider-label-row"><span>Oxygen Concentration</span><span class="slider-val" id="twin-o2-val">21%</span></div>
-                <input type="range" id="twin-o2" min="13" max="40" step="0.5" value="21" />
-              </div>
-              <div class="slider-row">
-                <div class="slider-label-row"><span>Forced Ventilation Flow</span><span class="slider-val" id="twin-flow-val">8 cm/s</span></div>
-                <input type="range" id="twin-flow" min="0" max="35" step="0.5" value="8" />
-              </div>
-              <div class="slider-row">
-                <div class="slider-label-row"><span>Cabin Pressure</span><span class="slider-val" id="twin-pressure-val">101.3 kPa</span></div>
-                <input type="range" id="twin-pressure" min="40" max="120" step="0.5" value="101.3" />
-              </div>
-              <div class="slider-row">
-                <div class="slider-label-row"><span>Simulation Speed</span><span class="slider-val" id="twin-speed-val">1x</span></div>
-                <input type="range" id="twin-speed" min="0.2" max="2.5" step="0.1" value="1.0" />
-              </div>
-
-              <button type="button" class="btn btn-cyan" style="width:100%;margin-top:6px;" id="twin-ask-ai-btn">
-                Ask FlameAI About This Flame Regime
+              <button type="button" class="hero-send-btn" id="hero-prompt-submit" aria-label="Ask FlameAI">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>
               </button>
             </div>
           </div>
-        </section>
 
-        <!-- ── VIEW 3: CABIN SAFETY & EXACT 2^5 SHAPLEY LAB ────────────────── -->
-        <section class="view-panel" id="view-cabin">
-          <div class="view-header">
-            <div>
-              <h1 class="view-title">Cabin Fire-Safety Lab &amp; Exact Shapley Attribution</h1>
-              <p class="view-subtitle">Transparent NASA combustion physics (LOI, ventilation paradox, diluent heat capacity) with exact 2⁵ cooperative Shapley feature attributions.</p>
+          <div class="hero-chips">
+            <button type="button" class="hero-chip" data-hero-prompt="Explain the cool-flame regime observed in FLEX-2">Cool-Flame Regime</button>
+            <button type="button" class="hero-chip" data-hero-prompt="Fire safety risk of PMMA in lunar 34% O2 exploration atmosphere">Lunar 34% O₂ Risk</button>
+            <button type="button" class="hero-chip" data-hero-prompt="Why is Nomex safer than cotton-fiberglass in space habitats?">Nomex vs Cotton</button>
+            <button type="button" class="hero-chip" data-hero-prompt="Why is cabin ventilation shutdown the first fire response protocol?">Ventilation Shutdown</button>
+          </div>
+        </div>
+
+        <!-- 4 Clean Metric Cards -->
+        <div class="grid-4 mb-3" id="dashboard-kpis"></div>
+
+        <!-- Live AI Mission Brief (from /api/summary) -->
+        <div class="brief-banner" id="dashboard-mission-brief">
+          <div class="text-muted">Loading mission intelligence from the NASA combustion corpus…</div>
+        </div>
+
+        <!-- Interactive Feature Showcase Panels -->
+        <div class="feature-showcase-grid">
+          <!-- Panel 01: 3D Flame Twin -->
+          <div class="feature-card">
+            <div class="feature-card-body">
+              <div class="feature-kicker">PANEL 01 · SIMULATION</div>
+              <h3 class="feature-title">3D Microgravity Flame Digital Twin</h3>
+              <p class="feature-desc">
+                Real-time WebGL2 volumetric combustion chamber modeling 0g spherical diffusion shells, FLEX-2 cool flames, and uncapped custom gravity, oxygen, wind, and pressure regimes.
+              </p>
+              <button type="button" class="btn" style="width:fit-content;" data-jump-tab="twin">
+                Launch 3D Chamber →
+              </button>
             </div>
-            <div class="flex gap-2 flex-wrap">
-              <button type="button" class="btn btn-sm" id="cabin-rank-runs-btn">Find Matching NASA Runs →</button>
-              <button type="button" class="btn btn-primary btn-sm" id="cabin-ask-ai-btn">Audit Cabin with FlameAI</button>
+            <div class="feature-visual feature-visual-flame">
+              <div class="feature-preview-card">
+                <div class="feature-preview-head">
+                  <span>WebGL2 EMBER Chamber</span>
+                  <span class="badge badge-flame">60 FPS</span>
+                </div>
+                <div class="flex justify-between mb-3" style="font-size:11.5px;">
+                  <span class="text-sec">ISS 0g Shell</span>
+                  <span class="mono" style="font-weight:700;color:var(--accent-cyan);">1735 K · 0g</span>
+                </div>
+                <div class="flex justify-between mb-3" style="font-size:11.5px;">
+                  <span class="text-sec">Artemis 0.16g</span>
+                  <span class="mono" style="font-weight:700;color:var(--accent-flame);">34% O₂ · 56.5 kPa</span>
+                </div>
+                <div class="text-muted" style="font-size:11px;padding-top:8px;border-top:1px solid var(--border-subtle);">
+                  Click any readout number to test custom physics regimes without limits.
+                </div>
+              </div>
             </div>
           </div>
 
-          <div class="pill-group mb-3" id="cabin-preset-pills"></div>
+          <!-- Panel 02: Cabin Safety & Exact Shapley -->
+          <div class="feature-card">
+            <div class="feature-card-body">
+              <div class="feature-kicker">PANEL 02 · RISK ENGINE</div>
+              <h3 class="feature-title">Habitat Fire Risk &amp; Exact 2⁵ Shapley Lab</h3>
+              <p class="feature-desc">
+                Evaluate flammability shifts across ISS, Lunar (0.16g), and Martian (0.38g) atmospheres with exact cooperative Shapley attributions and an interactive (O₂, P) phase map.
+              </p>
+              <button type="button" class="btn" style="width:fit-content;" data-jump-tab="cabin">
+                Open Safety Lab →
+              </button>
+            </div>
+            <div class="feature-visual feature-visual-safety">
+              <div class="feature-preview-card">
+                <div class="feature-preview-head">
+                  <span>Lunar Habitat Assessment</span>
+                  <span class="badge risk-CRITICAL">HIGH RISK</span>
+                </div>
+                <div class="flex justify-between" style="font-size:11.5px;font-weight:600;">
+                  <span>PMMA in 34% O₂ (56.5 kPa)</span>
+                  <span class="mono text-flame">LOI 19.3%</span>
+                </div>
+                <div class="mini-progress-track">
+                  <div class="mini-progress-fill" style="width:84%;"></div>
+                </div>
+                <div class="text-sec" style="font-size:11px;">
+                  NASA-STD-6001B re-qualification required for enriched exploration atmospheres.
+                </div>
+              </div>
+            </div>
+          </div>
 
-          <div class="grid-cabin">
-            <!-- Left Controls -->
-            <div class="card">
+          <!-- Panel 03: Grounded Graph-RAG + PDFs -->
+          <div class="feature-card">
+            <div class="feature-card-body">
+              <div class="feature-kicker">PANEL 03 · GROUNDED AI</div>
+              <h3 class="feature-title">FlameAI Co-Pilot &amp; NASA PDF Library</h3>
+              <p class="feature-desc">
+                Hybrid cosine + BM25 retrieval fused with a 227-node NASA knowledge graph, sentence-level citation audit, automatic scientific plots, and direct links to 9 official NASA PDFs.
+              </p>
+              <button type="button" class="btn" style="width:fit-content;" data-jump-tab="chat">
+                Open FlameAI Chat →
+              </button>
+            </div>
+            <div class="feature-visual feature-visual-rag">
+              <div class="feature-preview-card">
+                <div class="feature-preview-head">
+                  <span>FlameAI Grounded Synthesis</span>
+                  <span class="badge badge-cyan">Audited</span>
+                </div>
+                <p class="text-sec" style="margin:0 0 10px;font-size:11.5px;line-height:1.55;">
+                  "In microgravity, eliminating buoyant convection produces spherical blue diffusion flames; shutting down ventilation fans is the primary containment directive."
+                </p>
+                <div class="flex justify-between items-center" style="font-size:10.5px;">
+                  <span class="mono text-cyan">[DOC-01 p.1] · [DOC-03 p.1]</span>
+                  <span style="font-weight:700;color:var(--accent-sage);">Websites + PDFs</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Panel 04: 50-Run Telemetry & Knowledge Graph -->
+          <div class="feature-card">
+            <div class="feature-card-body">
+              <div class="feature-kicker">PANEL 04 · TELEMETRY &amp; GRAPH</div>
+              <h3 class="feature-title">50-Run Scenario Ranker &amp; Knowledge Graph</h3>
+              <p class="feature-desc">
+                Rank 50 NASA proxy combustion runs against your cabin setup with custom weights, overlay 40-point flame telemetry curves, and traverse multi-hop experiment relationships.
+              </p>
+              <div class="flex gap-2 flex-wrap">
+                <button type="button" class="btn btn-sm" data-jump-tab="ranking">50-Run Ranker</button>
+                <button type="button" class="btn btn-sm" data-jump-tab="graph">Knowledge Graph</button>
+              </div>
+            </div>
+            <div class="feature-visual feature-visual-data">
+              <div class="feature-preview-card">
+                <div class="feature-preview-head">
+                  <span>NASA PSI Telemetry &amp; KG</span>
+                  <span class="badge badge-violet">227 Nodes</span>
+                </div>
+                <div class="flex justify-between mb-3" style="font-size:11.5px;">
+                  <span class="text-sec">Proxy Combustion Runs</span>
+                  <span class="mono" style="font-weight:700;">50 Runs · 4 Metrics</span>
+                </div>
+                <div class="flex justify-between mb-3" style="font-size:11.5px;">
+                  <span class="text-sec">Semantic Graph Links</span>
+                  <span class="mono" style="font-weight:700;color:var(--accent-violet);">342 Relations</span>
+                </div>
+                <div class="text-muted" style="font-size:11px;padding-top:8px;border-top:1px solid var(--border-subtle);">
+                  Compare side-by-side flame radius, droplet d², heat flux &amp; temperature.
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Analytical Charts -->
+        <div class="grid-2 mb-3">
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <h3 class="card-title">Flagship Missions by Research Domain</h3>
+                <div class="text-muted" style="font-size:12px;">Distribution across solid, gaseous, droplet, and spacecraft-scale investigations</div>
+              </div>
+              <span class="badge badge-flame">12 Missions</span>
+            </div>
+            <div class="chart-box"><canvas id="dash-cat-chart"></canvas></div>
+          </div>
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <h3 class="card-title">50 NASA Test Runs by Combustion Regime</h3>
+                <div class="text-muted" style="font-size:12px;">Sustained burn, cool flame, self-extinguished, and no-ignition telemetry outcomes</div>
+              </div>
+              <span class="badge badge-cyan">PSI Telemetry</span>
+            </div>
+            <div class="chart-box"><canvas id="dash-regime-chart"></canvas></div>
+          </div>
+        </div>
+
+        <!-- Empirical Findings Feed -->
+        <div class="card mt-4">
+          <div class="card-header">
+            <div>
+              <h3 class="card-title">Empirical Findings Feed</h3>
+              <div class="text-muted" style="font-size:12.5px;">Peer-reviewed microgravity combustion observations from ISS &amp; Cygnus missions</div>
+            </div>
+            <button type="button" class="btn btn-sm" data-jump-tab="explorer">View All Experiments →</button>
+          </div>
+          <div class="grid-3" id="dash-findings-grid"></div>
+        </div>
+      </section>
+
+      <!-- ── VIEW 2: 3D WEBGL2 VOLUMETRIC FLAME TWIN ─────────────────────── -->
+      <section class="view-panel" id="view-twin">
+        <div class="view-header">
+          <div>
+            <h1 class="view-title">3D Microgravity Flame Digital Twin</h1>
+            <p class="view-subtitle">Real-time volumetric flame physics transitioning from 0g spherical diffusion shells and cool flames to buoyant and hypergravity plumes. Click any readout number to enter custom values.</p>
+          </div>
+          <div class="flex gap-2 flex-wrap">
+            <span class="badge badge-cyan" id="twin-engine-badge">WebGL2 EMBER</span>
+            <button type="button" class="btn btn-sm" id="twin-pull-cabin-btn">Pull Active Cabin</button>
+            <button type="button" class="btn btn-primary btn-sm" id="twin-push-cabin-btn">Evaluate in Cabin Lab →</button>
+          </div>
+        </div>
+
+        <div class="pill-group mb-3" id="twin-scene-pills"></div>
+
+        <div class="grid-twin">
+          <div>
+            <div class="flame-stage-wrap">
+              <canvas id="flame-canvas"></canvas>
+              <div class="flame-hud-top">
+                <span class="badge risk-HIGH" id="hud-regime-badge">Ventilation-Paradox Zone</span>
+                <div class="hud-chip" style="padding:5px 10px;">
+                  <span class="mono" style="font-size:11px;color:var(--accent-cyan);" id="twin-sync-hint">Synced with NASA BASS-II / FLEX-2</span>
+                </div>
+              </div>
+              <div class="flame-hud-bottom">
+                <div class="hud-chip">
+                  <div class="hud-chip-label">Peak Temp</div>
+                  <div class="hud-chip-val" id="hud-temp">1750 K</div>
+                </div>
+                <div class="hud-chip">
+                  <div class="hud-chip-label">Plume Height</div>
+                  <div class="hud-chip-val" id="hud-height">32 mm</div>
+                </div>
+                <div class="hud-chip">
+                  <div class="hud-chip-label">Effective Flow</div>
+                  <div class="hud-chip-val" id="hud-veff">8.0 cm/s</div>
+                </div>
+                <div class="hud-chip">
+                  <div class="hud-chip-label">Soot Luminance</div>
+                  <div class="hud-chip-val" id="hud-soot">18%</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="card mt-3">
               <div class="card-header">
-                <h3 class="card-title">Habitat Atmosphere &amp; Fuel</h3>
-                <span class="badge badge-cyan">Live Physics</span>
-              </div>
-
-              <div class="slider-row">
-                <div class="slider-label-row"><span>Oxygen Concentration (% O₂)</span><span class="slider-val" id="cabin-o2-val">21%</span></div>
-                <input type="range" id="cabin-o2" min="15" max="42" step="0.5" value="21" />
-              </div>
-              <div class="slider-row">
-                <div class="slider-label-row"><span>Cabin Pressure (kPa)</span><span class="slider-val" id="cabin-pressure-val">101.3 kPa</span></div>
-                <input type="range" id="cabin-pressure" min="40" max="120" step="0.5" value="101.3" />
-              </div>
-              <div class="slider-row">
-                <div class="slider-label-row"><span>Forced Ventilation (cm/s)</span><span class="slider-val" id="cabin-flow-val">10 cm/s</span></div>
-                <input type="range" id="cabin-flow" min="0" max="45" step="0.5" value="10" />
-              </div>
-              <div class="slider-row">
-                <div class="slider-label-row"><span>Gravity Level (g)</span><span class="slider-val" id="cabin-gravity-val">0 g</span></div>
-                <input type="range" id="cabin-gravity" min="0" max="1.2" step="0.02" value="0" />
-              </div>
-
-              <div class="mb-3">
-                <label class="slider-label-row" for="cabin-material"><span>Spacecraft Fuel Material</span></label>
-                <select class="select" id="cabin-material"></select>
-              </div>
-              <div class="mb-3">
-                <label class="slider-label-row" for="cabin-diluent"><span>Inert Diluent Gas</span></label>
-                <select class="select" id="cabin-diluent"></select>
-              </div>
-
-              <div class="mt-3">
-                <div class="card-kicker">PHYSICS DIAGNOSTIC FACTORS</div>
-                <div id="cabin-factors"></div>
-              </div>
-            </div>
-
-            <!-- Right Analytics -->
-            <div>
-              <div class="grid-4 mb-3">
-                <div class="kpi-card">
-                  <div class="kpi-label">Fire Risk Index</div>
-                  <div class="kpi-value" id="cabin-risk-index">--</div>
-                  <div><span class="badge" id="cabin-risk-band">--</span></div>
+                <div>
+                  <div class="card-kicker">BASS-II DISCOVERY</div>
+                  <h3 class="card-title">Ventilation Paradox Curve (LOI Shift vs Effective Velocity)</h3>
                 </div>
-                <div class="kpi-card">
-                  <div class="kpi-label">Safety Score</div>
-                  <div class="kpi-value" id="cabin-safety-score" style="color:var(--accent-cyan);">--</div>
-                  <div class="kpi-sub">100 − Risk Index</div>
-                </div>
-                <div class="kpi-card">
-                  <div class="kpi-label">Estimated LOI</div>
-                  <div class="kpi-value" id="cabin-loi">--</div>
-                  <div class="kpi-sub">O₂ Margin: <span class="mono" id="cabin-margin">--</span></div>
-                </div>
-                <div class="kpi-card">
-                  <div class="kpi-label">Predicted Regime</div>
-                  <div class="kpi-value" id="cabin-regime" style="font-size:18px;margin-top:10px;">--</div>
-                  <div class="kpi-sub">v_eff = <span class="mono" id="cabin-veff">--</span></div>
-                </div>
+                <span class="badge badge-flame">Minimum LOI @ 8 cm/s</span>
               </div>
-
-              <div class="grid-2 mb-3">
-                <div class="card">
-                  <div class="card-header">
-                    <div>
-                      <div class="card-kicker">EXACT 2⁵ COOPERATIVE ATTRIBUTION</div>
-                      <h3 class="card-title">Shapley Risk Contributions</h3>
-                    </div>
-                  </div>
-                  <div class="chart-box"><canvas id="cabin-shapley-chart"></canvas></div>
-                  <div class="mono text-muted mt-2" style="font-size:11px;" id="cabin-shapley-identity"></div>
-                </div>
-
-                <div class="card">
-                  <div class="card-header">
-                    <div>
-                      <div class="card-kicker">INTERACTIVE (O₂, P) MAP</div>
-                      <h3 class="card-title">Combustion Phase Diagram</h3>
-                    </div>
-                    <div class="flex gap-2">
-                      <span class="badge risk-LOW" style="font-size:9.5px;">Safe</span>
-                      <span class="badge badge-cyan" style="font-size:9.5px;">Cool</span>
-                      <span class="badge risk-CRITICAL" style="font-size:9.5px;">Burn</span>
-                    </div>
-                  </div>
-                  <div class="phase-grid-wrap">
-                    <canvas id="phase-grid-canvas"></canvas>
-                  </div>
-                </div>
-              </div>
-
-              <div class="card mb-3">
-                <div class="card-header">
-                  <h3 class="card-title">NASA-Grounded Engineering Mitigations</h3>
-                  <span class="badge badge-flame">Click citations to read paper</span>
-                </div>
-                <div id="cabin-recommendations"></div>
-              </div>
-
-              <div class="card">
-                <div class="card-header">
-                  <h3 class="card-title">Cross-Habitat Material Safety Matrix (Click row to load material)</h3>
-                  <span class="badge">Safety Score 0–100</span>
-                </div>
-                <div class="data-table-wrap">
-                  <table class="data-table">
-                    <thead>
-                      <tr>
-                        <th>Material</th>
-                        <th>ISS LOI</th>
-                        <th>ISS 21% O₂</th>
-                        <th>Lunar 34% O₂</th>
-                        <th>Mars 26.5% O₂</th>
-                        <th>Transit 30%</th>
-                        <th>Avg</th>
-                      </tr>
-                    </thead>
-                    <tbody id="cabin-matrix-tbody"></tbody>
-                  </table>
-                </div>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <!-- ── VIEW 4: 50-RUN SCENARIO RANKER & EXPLAINABLE RANKINGS ───────── -->
-        <section class="view-panel" id="view-ranking">
-          <div class="view-header">
-            <div>
-              <h1 class="view-title">NASA Run Ranker, Telemetry &amp; Explainable Rankings</h1>
-              <p class="view-subtitle">Rank 50 NASA proxy combustion runs against your active cabin scenario with tunable weights, inspect 40-point telemetry, or explore explainable flagship rankings.</p>
-            </div>
-            <div class="subtabs">
-              <button type="button" class="subtab-btn active" data-rank-subtab="runs">50-Run Telemetry Ranker</button>
-              <button type="button" class="subtab-btn" data-rank-subtab="entities">Explainable Entity Rankings</button>
+              <div class="chart-box"><canvas id="twin-vent-chart"></canvas></div>
             </div>
           </div>
 
-          <!-- Sub-panel A: 50-Run Scenario Ranker -->
-          <div id="rank-panel-runs">
-            <div class="card mb-3">
-              <div class="flex items-center justify-between flex-wrap gap-2 mb-3">
-                <div class="mono" style="font-size:12px;color:var(--accent-cyan);" id="rank-active-scenario-label"></div>
-                <div class="flex gap-2 flex-wrap">
-                  <select class="select" id="run-program-filter" style="width:auto;"></select>
-                  <select class="select" id="run-regime-filter" style="width:auto;"></select>
-                </div>
+          <div class="card">
+            <div class="card-header">
+              <h3 class="card-title">Combustion Chamber Controls</h3>
+              <div class="flex gap-2">
+                <button type="button" class="btn btn-sm" id="twin-pause-btn" aria-pressed="false">⏸ Pause</button>
+                <button type="button" class="btn btn-primary btn-sm" id="twin-ignite-btn">⚡ Ignite Pulse</button>
               </div>
-              <div class="grid-3">
-                <div class="slider-row" style="margin-bottom:0;">
-                  <div class="slider-label-row"><span>Similarity Weight</span><span class="slider-val" id="w-similarity-val">0.50</span></div>
-                  <input type="range" id="w-similarity" min="0" max="1" step="0.05" value="0.5" />
-                </div>
-                <div class="slider-row" style="margin-bottom:0;">
-                  <div class="slider-label-row"><span>Completeness Weight</span><span class="slider-val" id="w-completeness-val">0.20</span></div>
-                  <input type="range" id="w-completeness" min="0" max="1" step="0.05" value="0.2" />
-                </div>
-                <div class="slider-row" style="margin-bottom:0;">
-                  <div class="slider-label-row"><span>Safety Criticality Weight</span><span class="slider-val" id="w-criticality-val">0.30</span></div>
-                  <input type="range" id="w-criticality" min="0" max="1" step="0.05" value="0.3" />
-                </div>
+            </div>
+            <p class="text-sec" style="font-size:12.5px;margin:0 0 14px;" id="twin-scene-desc"></p>
+
+            <div class="mb-3">
+              <div class="slider-label-row"><span>Fuel Sample Geometry</span></div>
+              <div class="pill-group" id="twin-fuel-pills"></div>
+            </div>
+
+            <div class="slider-row">
+              <div class="slider-label-row"><span>Gravity Level</span><span class="slider-val" id="twin-gravity-val">0 g</span></div>
+              <input type="range" id="twin-gravity" min="0" max="1.5" step="0.02" value="0" />
+            </div>
+            <div class="slider-row">
+              <div class="slider-label-row"><span>Oxygen Concentration</span><span class="slider-val" id="twin-o2-val">21%</span></div>
+              <input type="range" id="twin-o2" min="13" max="40" step="0.5" value="21" />
+            </div>
+            <div class="slider-row">
+              <div class="slider-label-row"><span>Forced Ventilation Flow</span><span class="slider-val" id="twin-flow-val">8 cm/s</span></div>
+              <input type="range" id="twin-flow" min="0" max="35" step="0.5" value="8" />
+            </div>
+            <div class="slider-row">
+              <div class="slider-label-row"><span>Cabin Pressure</span><span class="slider-val" id="twin-pressure-val">101.3 kPa</span></div>
+              <input type="range" id="twin-pressure" min="40" max="120" step="0.5" value="101.3" />
+            </div>
+            <div class="slider-row">
+              <div class="slider-label-row"><span>Simulation Speed</span><span class="slider-val" id="twin-speed-val">1x</span></div>
+              <input type="range" id="twin-speed" min="0.2" max="2.5" step="0.1" value="1.0" />
+            </div>
+
+            <button type="button" class="btn btn-cyan" style="width:100%;margin-top:6px;" id="twin-ask-ai-btn">
+              Ask FlameAI About This Flame Regime
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- ── VIEW 3: CABIN SAFETY & EXACT 2^5 SHAPLEY LAB ────────────────── -->
+      <section class="view-panel" id="view-cabin">
+        <div class="view-header">
+          <div>
+            <h1 class="view-title">Cabin Fire-Safety Lab &amp; Exact Shapley Attribution</h1>
+            <p class="view-subtitle">Transparent NASA combustion physics (LOI, ventilation paradox, diluent heat capacity) with exact 2⁵ cooperative Shapley feature attributions.</p>
+          </div>
+          <div class="flex gap-2 flex-wrap">
+            <button type="button" class="btn btn-sm" id="cabin-rank-runs-btn">Find Matching NASA Runs →</button>
+            <button type="button" class="btn btn-primary btn-sm" id="cabin-ask-ai-btn">Audit Cabin with FlameAI</button>
+          </div>
+        </div>
+
+        <div class="pill-group mb-3" id="cabin-preset-pills"></div>
+
+        <div class="grid-cabin">
+          <!-- Left Controls -->
+          <div class="card">
+            <div class="card-header">
+              <h3 class="card-title">Habitat Atmosphere &amp; Fuel</h3>
+              <span class="badge badge-cyan">Live Physics</span>
+            </div>
+
+            <div class="slider-row">
+              <div class="slider-label-row"><span>Oxygen Concentration (% O₂)</span><span class="slider-val" id="cabin-o2-val">21%</span></div>
+              <input type="range" id="cabin-o2" min="15" max="42" step="0.5" value="21" />
+            </div>
+            <div class="slider-row">
+              <div class="slider-label-row"><span>Cabin Pressure (kPa)</span><span class="slider-val" id="cabin-pressure-val">101.3 kPa</span></div>
+              <input type="range" id="cabin-pressure" min="40" max="120" step="0.5" value="101.3" />
+            </div>
+            <div class="slider-row">
+              <div class="slider-label-row"><span>Forced Ventilation (cm/s)</span><span class="slider-val" id="cabin-flow-val">10 cm/s</span></div>
+              <input type="range" id="cabin-flow" min="0" max="45" step="0.5" value="10" />
+            </div>
+            <div class="slider-row">
+              <div class="slider-label-row"><span>Gravity Level (g)</span><span class="slider-val" id="cabin-gravity-val">0 g</span></div>
+              <input type="range" id="cabin-gravity" min="0" max="1.2" step="0.02" value="0" />
+            </div>
+
+            <div class="mb-3">
+              <label class="slider-label-row" for="cabin-material"><span>Spacecraft Fuel Material</span></label>
+              <select class="select" id="cabin-material"></select>
+            </div>
+            <div class="mb-3">
+              <label class="slider-label-row" for="cabin-diluent"><span>Inert Diluent Gas</span></label>
+              <select class="select" id="cabin-diluent"></select>
+            </div>
+
+            <div class="mt-3">
+              <div class="card-kicker">PHYSICS DIAGNOSTIC FACTORS</div>
+              <div id="cabin-factors"></div>
+            </div>
+          </div>
+
+          <!-- Right Analytics -->
+          <div>
+            <div class="grid-4 mb-3">
+              <div class="kpi-card">
+                <div class="kpi-label">Fire Risk Index</div>
+                <div class="kpi-value" id="cabin-risk-index">--</div>
+                <div><span class="badge" id="cabin-risk-band">--</span></div>
+              </div>
+              <div class="kpi-card">
+                <div class="kpi-label">Safety Score</div>
+                <div class="kpi-value" id="cabin-safety-score" style="color:var(--accent-cyan);">--</div>
+                <div class="kpi-sub">100 − Risk Index</div>
+              </div>
+              <div class="kpi-card">
+                <div class="kpi-label">Estimated LOI</div>
+                <div class="kpi-value" id="cabin-loi">--</div>
+                <div class="kpi-sub">O₂ Margin: <span class="mono" id="cabin-margin">--</span></div>
+              </div>
+              <div class="kpi-card">
+                <div class="kpi-label">Predicted Regime</div>
+                <div class="kpi-value" id="cabin-regime" style="font-size:18px;margin-top:8px;">--</div>
+                <div class="kpi-sub">v_eff = <span class="mono" id="cabin-veff">--</span></div>
               </div>
             </div>
 
-            <div class="grid-asymmetric">
+            <div class="grid-2 mb-3">
               <div class="card">
                 <div class="card-header">
-                  <h3 class="card-title">Top Ranked NASA Test Runs (Click row for telemetry)</h3>
-                  <span class="mono text-muted" style="font-size:11px;">Cyan=Sim · Violet=Comp · Flame=Crit</span>
+                  <div>
+                    <div class="card-kicker">EXACT 2⁵ COOPERATIVE ATTRIBUTION</div>
+                    <h3 class="card-title">Shapley Risk Contributions</h3>
+                  </div>
                 </div>
-                <div class="data-table-wrap" style="max-height:520px;overflow-y:auto;">
-                  <table class="data-table">
-                    <thead>
-                      <tr>
-                        <th>#</th>
-                        <th>Run ID</th>
-                        <th>Program</th>
-                        <th>Fuel</th>
-                        <th>O₂ / P</th>
-                        <th>Flow / g</th>
-                        <th>Regime</th>
-                        <th>Score</th>
-                      </tr>
-                    </thead>
-                    <tbody id="runs-rank-tbody"></tbody>
-                  </table>
-                </div>
+                <div class="chart-box"><canvas id="cabin-shapley-chart"></canvas></div>
+                <div class="mono text-muted mt-2" style="font-size:11px;" id="cabin-shapley-identity"></div>
               </div>
 
               <div class="card">
                 <div class="card-header">
                   <div>
-                    <div class="card-kicker">TIME-SERIES TELEMETRY INSPECTOR</div>
-                    <h3 class="card-title">Measured Combustion Curves</h3>
+                    <div class="card-kicker">INTERACTIVE (O₂, P) MAP</div>
+                    <h3 class="card-title">Combustion Phase Diagram</h3>
+                  </div>
+                  <div class="flex gap-2">
+                    <span class="badge risk-LOW" style="font-size:10px;">Safe</span>
+                    <span class="badge badge-cyan" style="font-size:10px;">Cool</span>
+                    <span class="badge risk-CRITICAL" style="font-size:10px;">Burn</span>
                   </div>
                 </div>
-                <div id="telemetry-run-meta" class="mb-3"></div>
-                <div class="grid-2 mb-3">
-                  <select class="select" id="telemetry-metric-select">
-                    <option value="flame_radius_mm">Flame Radius (mm)</option>
-                    <option value="d_squared_mm2">Droplet d² (mm²)</option>
-                    <option value="radiative_heat_flux_kw_m2">Radiative Heat Flux (kW/m²)</option>
-                    <option value="flame_temp_k">Flame Temperature (K)</option>
-                  </select>
-                  <select class="select" id="telemetry-compare-select">
-                    <option value="">Compare overlay: None</option>
-                  </select>
+                <div class="phase-grid-wrap">
+                  <canvas id="phase-grid-canvas"></canvas>
                 </div>
-                <div class="chart-box-tall"><canvas id="run-telemetry-chart"></canvas></div>
               </div>
             </div>
-          </div>
 
-          <!-- Sub-panel B: Explainable Entity Rankings -->
-          <div id="rank-panel-entities" style="display:none;">
             <div class="card mb-3">
-              <div class="flex items-center justify-between flex-wrap gap-3">
-                <div class="pill-group">
-                  <button type="button" class="pill-btn active" data-entity-tab="experiments">Experiments</button>
-                  <button type="button" class="pill-btn" data-entity-tab="materials">Materials</button>
-                  <button type="button" class="pill-btn" data-entity-tab="findings">Findings</button>
-                  <button type="button" class="pill-btn" data-entity-tab="guidelines">Safety Guidelines</button>
-                </div>
-                <div class="flex items-center gap-2" id="entity-env-wrap" style="display:none;">
-                  <span class="text-sec" style="font-size:12px;">Habitat:</span>
-                  <select class="select" id="entity-env-select" style="width:auto;">
-                    <option value="Lunar 34% O2">Lunar Surface (34% O₂)</option>
-                    <option value="Mars 34% O2">Mars Habitat (34% O₂)</option>
-                    <option value="ISS 21% O2">ISS Nominal (21% O₂)</option>
-                  </select>
-                </div>
+              <div class="card-header">
+                <h3 class="card-title">NASA-Grounded Engineering Mitigations</h3>
+                <span class="badge badge-flame">Click citations to read paper</span>
               </div>
-              <div class="mono text-muted mt-2" style="font-size:11.5px;" id="entity-ranking-rule"></div>
+              <div id="cabin-recommendations"></div>
             </div>
-            <div id="entity-ranking-list"></div>
-          </div>
-        </section>
 
-        <!-- ── VIEW 5: EXPERIMENT EXPLORER & 5-AXIS RADAR COMPARE ──────────── -->
-        <section class="view-panel" id="view-explorer">
-          <div class="view-header">
-            <div>
-              <h1 class="view-title">NASA Experiment Explorer &amp; 5-Axis Radar Comparison</h1>
-              <p class="view-subtitle">Browse all 12 flagship ISS and Cygnus fire-safety programs and compare combustion profiles side-by-side.</p>
+            <div class="card">
+              <div class="card-header">
+                <h3 class="card-title">Cross-Habitat Material Safety Matrix (Click row to load material)</h3>
+                <span class="badge">Safety Score 0–100</span>
+              </div>
+              <div class="data-table-wrap">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th>Material</th>
+                      <th>ISS LOI</th>
+                      <th>ISS 21% O₂</th>
+                      <th>Lunar 34% O₂</th>
+                      <th>Mars 26.5% O₂</th>
+                      <th>Transit 30%</th>
+                      <th>Avg</th>
+                    </tr>
+                  </thead>
+                  <tbody id="cabin-matrix-tbody"></tbody>
+                </table>
+              </div>
             </div>
           </div>
+        </div>
+      </section>
 
-          <!-- Radar Compare Studio -->
+      <!-- ── VIEW 4: 50-RUN SCENARIO RANKER & EXPLAINABLE RANKINGS ───────── -->
+      <section class="view-panel" id="view-ranking">
+        <div class="view-header">
+          <div>
+            <h1 class="view-title">NASA Run Ranker, Telemetry &amp; Explainable Rankings</h1>
+            <p class="view-subtitle">Rank 50 NASA proxy combustion runs against your active cabin scenario with tunable weights, inspect 40-point telemetry, or explore explainable flagship rankings.</p>
+          </div>
+          <div class="subtabs">
+            <button type="button" class="subtab-btn active" data-rank-subtab="runs">50-Run Telemetry Ranker</button>
+            <button type="button" class="subtab-btn" data-rank-subtab="entities">Explainable Entity Rankings</button>
+          </div>
+        </div>
+
+        <!-- Sub-panel A: 50-Run Scenario Ranker -->
+        <div id="rank-panel-runs">
           <div class="card mb-3">
-            <div class="card-header flex-wrap">
-              <div>
-                <div class="card-kicker">SIDE-BY-SIDE BENCHMARK</div>
-                <h3 class="card-title">5-Axis Combustion Profile Radar</h3>
-              </div>
+            <div class="flex items-center justify-between flex-wrap gap-2 mb-3">
+              <div class="mono" style="font-size:12px;color:var(--accent-cyan);" id="rank-active-scenario-label"></div>
               <div class="flex gap-2 flex-wrap">
-                <select class="select" id="compare-e1" style="width:auto;min-width:200px;"></select>
-                <span class="badge badge-flame">VS</span>
-                <select class="select" id="compare-e2" style="width:auto;min-width:200px;"></select>
+                <select class="select" id="run-program-filter" style="width:auto;"></select>
+                <select class="select" id="run-regime-filter" style="width:auto;"></select>
               </div>
             </div>
-            <div class="grid-asymmetric">
-              <div class="chart-box-tall"><canvas id="compare-radar-chart"></canvas></div>
-              <div>
-                <div class="card-kicker mb-3">METRIC DELTAS (0–10 SCALE)</div>
-                <div id="compare-deltas"></div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Filter Bar -->
-          <div class="card mb-3">
             <div class="grid-3">
-              <input type="text" class="input" id="exp-search-input" placeholder="Filter by mission, material, or finding..." />
-              <select class="select" id="exp-cat-select"></select>
-              <select class="select" id="exp-plat-select"></select>
-            </div>
-          </div>
-
-          <div class="grid-3" id="explorer-cards-grid"></div>
-        </section>
-
-        <!-- ── VIEW 6: FLAMEAI CO-PILOT (STREAMING GRAPH-RAG) ──────────────── -->
-        <section class="view-panel" id="view-chat">
-          <div class="view-header">
-            <div>
-              <h1 class="view-title">FlameAI Co-Pilot — Verified NASA Graph-RAG</h1>
-              <p class="view-subtitle">Token-by-token streaming synthesis grounded in our Hybrid RRF corpus, Knowledge Graph, live Cabin Shapley model, Matplotlib charting, and citation audit.</p>
-            </div>
-            <button type="button" class="btn btn-sm" id="chat-clear-btn">Clear Memory</button>
-          </div>
-
-          <div class="chat-layout">
-            <div class="card chat-box" style="padding:0;overflow:hidden;">
-              <div class="chat-messages" id="chat-messages"></div>
-              <div class="chat-input-bar">
-                <textarea class="chat-textarea" id="chat-input" rows="2" placeholder="Ask about BASS-II, SAFFIRE, FLEX-2 cool flames, Artemis 34% O₂, or request a chart/plot..."></textarea>
-                <button type="button" class="btn btn-primary" id="chat-send-btn" style="height:44px;padding:0 18px;">Send</button>
+              <div class="slider-row" style="margin-bottom:0;">
+                <div class="slider-label-row"><span>Similarity Weight</span><span class="slider-val" id="w-similarity-val">0.50</span></div>
+                <input type="range" id="w-similarity" min="0" max="1" step="0.05" value="0.5" />
               </div>
-            </div>
-
-            <div class="flex" style="flex-direction:column;gap:14px;">
-              <div class="card">
-                <div class="card-kicker">CABIN CONTEXT INJECTION</div>
-                <label class="flex items-center gap-2 mt-2" style="cursor:pointer;font-weight:600;font-size:13px;">
-                  <input type="checkbox" id="chat-include-scenario" checked />
-                  <span>Include Active Cabin Scenario</span>
-                </label>
-                <div class="mono text-sec mt-2" style="font-size:11.5px;padding:8px 10px;background:var(--bg-surface-2);border-radius:8px;" id="chat-scenario-preview"></div>
+              <div class="slider-row" style="margin-bottom:0;">
+                <div class="slider-label-row"><span>Completeness Weight</span><span class="slider-val" id="w-completeness-val">0.20</span></div>
+                <input type="range" id="w-completeness" min="0" max="1" step="0.05" value="0.2" />
               </div>
-
-              <div class="card">
-                <div class="card-kicker mb-3">SUGGESTED NASA MISSIONS &amp; PLOTS</div>
-                <div class="flex" style="flex-direction:column;gap:7px;" id="chat-quick-prompts"></div>
+              <div class="slider-row" style="margin-bottom:0;">
+                <div class="slider-label-row"><span>Safety Criticality Weight</span><span class="slider-val" id="w-criticality-val">0.30</span></div>
+                <input type="range" id="w-criticality" min="0" max="1" step="0.05" value="0.3" />
               </div>
             </div>
           </div>
-        </section>
 
-        <!-- ── VIEW 7: INTERACTIVE KNOWLEDGE GRAPH ─────────────────────────── -->
-        <section class="view-panel" id="view-graph">
-          <div class="view-header">
-            <div>
-              <h1 class="view-title">NASA Fire-Safety Knowledge Graph</h1>
-              <p class="view-subtitle">Drag nodes, scroll to zoom, pan canvas, and click any entity to inspect multi-hop NASA relationships.</p>
-            </div>
-            <span class="badge badge-violet" id="kg-stats-badge">Loading graph...</span>
-          </div>
-
-          <div class="card mb-3">
-            <div class="flex items-center justify-between flex-wrap gap-3">
-              <div class="pill-group" id="kg-type-filters"></div>
-              <input type="text" class="input" id="kg-search-input" placeholder="Highlight node (e.g. BASS, PMMA, DOC-01)..." style="max-width:290px;" />
-            </div>
-          </div>
-
-          <div class="kg-layout">
-            <div class="kg-canvas-wrap">
-              <canvas id="kg-canvas"></canvas>
-              <div class="kg-controls">
-                <button type="button" class="btn btn-sm" id="kg-zoom-in">+</button>
-                <button type="button" class="btn btn-sm" id="kg-zoom-out">−</button>
-                <button type="button" class="btn btn-sm" id="kg-reset">Reset</button>
+          <div class="grid-asymmetric">
+            <div class="card">
+              <div class="card-header">
+                <h3 class="card-title">Top Ranked NASA Test Runs (Click row for telemetry)</h3>
+                <span class="mono text-muted" style="font-size:11px;">Blue=Sim · Violet=Comp · Coral=Crit</span>
+              </div>
+              <div class="data-table-wrap" style="max-height:520px;overflow-y:auto;">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th>#</th>
+                      <th>Run ID</th>
+                      <th>Program</th>
+                      <th>Fuel</th>
+                      <th>O₂ / P</th>
+                      <th>Flow / g</th>
+                      <th>Regime</th>
+                      <th>Score</th>
+                    </tr>
+                  </thead>
+                  <tbody id="runs-rank-tbody"></tbody>
+                </table>
               </div>
             </div>
-            <div class="card" id="kg-inspector" style="max-height:580px;overflow-y:auto;">
-              <div class="card-kicker">NODE INSPECTOR</div>
-              <h3 style="font-family:var(--font-display);margin:4px 0 8px;">Select a Node</h3>
-              <p class="text-sec" style="font-size:13px;">Click any node on the canvas to highlight its connected NASA experiments, materials, safety directives, and peer-reviewed papers.</p>
+
+            <div class="card">
+              <div class="card-header">
+                <div>
+                  <div class="card-kicker">TIME-SERIES TELEMETRY INSPECTOR</div>
+                  <h3 class="card-title">Measured Combustion Curves</h3>
+                </div>
+              </div>
+              <div id="telemetry-run-meta" class="mb-3"></div>
+              <div class="grid-2 mb-3">
+                <select class="select" id="telemetry-metric-select">
+                  <option value="flame_radius_mm">Flame Radius (mm)</option>
+                  <option value="d_squared_mm2">Droplet d² (mm²)</option>
+                  <option value="radiative_heat_flux_kw_m2">Radiative Heat Flux (kW/m²)</option>
+                  <option value="flame_temp_k">Flame Temperature (K)</option>
+                </select>
+                <select class="select" id="telemetry-compare-select">
+                  <option value="">Compare overlay: None</option>
+                </select>
+              </div>
+              <div class="chart-box-tall"><canvas id="run-telemetry-chart"></canvas></div>
             </div>
           </div>
-        </section>
+        </div>
 
-        <!-- ── VIEW 8: NASA RESEARCH LIBRARY & PDFs ────────────────────────── -->
-        <section class="view-panel" id="view-resources">
-          <div class="view-header">
-            <div>
-              <h1 class="view-title">NASA Research Library &amp; Official PDFs</h1>
-              <p class="view-subtitle">Read full-text indexed NASA NTRS papers, ISS investigation briefs, and download 9 bundled NASA Glenn technical PDFs.</p>
-            </div>
-          </div>
-
+        <!-- Sub-panel B: Explainable Entity Rankings -->
+        <div id="rank-panel-entities" style="display:none;">
           <div class="card mb-3">
             <div class="flex items-center justify-between flex-wrap gap-3">
               <div class="pill-group">
-                <button type="button" class="pill-btn active" data-doc-filter="all">All Documents (13)</button>
-                <button type="button" class="pill-btn" data-doc-filter="nasa_paper">NASA NTRS Papers</button>
-                <button type="button" class="pill-btn" data-doc-filter="iss_investigation">ISS Investigations</button>
-                <button type="button" class="pill-btn" data-doc-filter="challenge_brief">Challenge Brief</button>
+                <button type="button" class="pill-btn active" data-entity-tab="experiments">Experiments</button>
+                <button type="button" class="pill-btn" data-entity-tab="materials">Materials</button>
+                <button type="button" class="pill-btn" data-entity-tab="findings">Findings</button>
+                <button type="button" class="pill-btn" data-entity-tab="guidelines">Safety Guidelines</button>
               </div>
-              <input type="text" class="input" id="resources-search" placeholder="Search title, author, DOC-ID..." style="max-width:280px;" />
+              <div class="flex items-center gap-2" id="entity-env-wrap" style="display:none;">
+                <span class="text-sec" style="font-size:12px;">Habitat:</span>
+                <select class="select" id="entity-env-select" style="width:auto;">
+                  <option value="Lunar 34% O2">Lunar Surface (34% O₂)</option>
+                  <option value="Mars 34% O2">Mars Habitat (34% O₂)</option>
+                  <option value="ISS 21% O2">ISS Nominal (21% O₂)</option>
+                </select>
+              </div>
+            </div>
+            <div class="mono text-muted mt-2" style="font-size:11.5px;" id="entity-ranking-rule"></div>
+          </div>
+          <div id="entity-ranking-list"></div>
+        </div>
+      </section>
+
+      <!-- ── VIEW 5: EXPERIMENT EXPLORER & 5-AXIS RADAR COMPARE ──────────── -->
+      <section class="view-panel" id="view-explorer">
+        <div class="view-header">
+          <div>
+            <h1 class="view-title">NASA Experiment Explorer &amp; 5-Axis Radar Comparison</h1>
+            <p class="view-subtitle">Browse all 12 flagship ISS and Cygnus fire-safety programs and compare combustion profiles side-by-side.</p>
+          </div>
+        </div>
+
+        <!-- Radar Compare Studio -->
+        <div class="card mb-3">
+          <div class="card-header flex-wrap">
+            <div>
+              <div class="card-kicker">SIDE-BY-SIDE BENCHMARK</div>
+              <h3 class="card-title">5-Axis Combustion Profile Radar</h3>
+            </div>
+            <div class="flex gap-2 flex-wrap items-center">
+              <select class="select" id="compare-e1" style="width:auto;min-width:200px;"></select>
+              <span class="badge badge-flame">VS</span>
+              <select class="select" id="compare-e2" style="width:auto;min-width:200px;"></select>
+            </div>
+          </div>
+          <div class="grid-asymmetric">
+            <div class="chart-box-tall"><canvas id="compare-radar-chart"></canvas></div>
+            <div>
+              <div class="card-kicker mb-3">METRIC DELTAS (0–10 SCALE)</div>
+              <div id="compare-deltas"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Filter Bar -->
+        <div class="card mb-3">
+          <div class="grid-3">
+            <input type="text" class="input" id="exp-search-input" placeholder="Filter by mission, material, or finding..." />
+            <select class="select" id="exp-cat-select"></select>
+            <select class="select" id="exp-plat-select"></select>
+          </div>
+        </div>
+
+        <div class="grid-3" id="explorer-cards-grid"></div>
+      </section>
+
+      <!-- ── VIEW 6: FLAMEAI CO-PILOT (STREAMING GRAPH-RAG) ──────────────── -->
+      <section class="view-panel" id="view-chat">
+        <div class="view-header">
+          <div>
+            <h1 class="view-title">FlameAI Co-Pilot — Verified NASA Graph-RAG</h1>
+            <p class="view-subtitle">Token-by-token streaming synthesis grounded in our Hybrid RRF corpus, Knowledge Graph, live Cabin Shapley model, Matplotlib charting, and citation audit.</p>
+          </div>
+          <button type="button" class="btn btn-sm" id="chat-clear-btn">Clear Memory</button>
+        </div>
+
+        <div class="chat-layout">
+          <div class="card chat-box" style="padding:0;overflow:hidden;">
+            <div class="chat-messages" id="chat-messages"></div>
+            <div class="chat-input-bar">
+              <textarea class="chat-textarea" id="chat-input" rows="2" placeholder="Ask about BASS-II, SAFFIRE, FLEX-2 cool flames, Artemis 34% O₂, or request a chart/plot..."></textarea>
+              <button type="button" class="btn btn-primary" id="chat-send-btn" style="height:44px;padding:0 20px;">Send</button>
             </div>
           </div>
 
-          <div class="grid-3" id="resources-grid"></div>
-        </section>
+          <div class="flex" style="flex-direction:column;gap:14px;">
+            <div class="card">
+              <div class="card-kicker">CABIN CONTEXT INJECTION</div>
+              <label class="flex items-center gap-2 mt-2" style="cursor:pointer;font-weight:600;font-size:13px;">
+                <input type="checkbox" id="chat-include-scenario" checked />
+                <span>Include Active Cabin Scenario</span>
+              </label>
+              <div class="mono text-sec mt-2" style="font-size:11.5px;padding:9px 11px;background:var(--bg-surface-2);border-radius:10px;" id="chat-scenario-preview"></div>
+            </div>
 
-      </main>
-    </div>
+            <div class="card">
+              <div class="card-kicker mb-3">SUGGESTED NASA MISSIONS &amp; PLOTS</div>
+              <div class="flex" style="flex-direction:column;gap:7px;" id="chat-quick-prompts"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ── VIEW 7: INTERACTIVE KNOWLEDGE GRAPH ─────────────────────────── -->
+      <section class="view-panel" id="view-graph">
+        <div class="view-header">
+          <div>
+            <h1 class="view-title">NASA Fire-Safety Knowledge Graph</h1>
+            <p class="view-subtitle">Drag nodes, scroll to zoom, pan canvas, and click any entity to inspect multi-hop NASA relationships.</p>
+          </div>
+          <span class="badge badge-violet" id="kg-stats-badge">Loading graph...</span>
+        </div>
+
+        <div class="card mb-3">
+          <div class="flex items-center justify-between flex-wrap gap-3">
+            <div class="pill-group" id="kg-type-filters"></div>
+            <input type="text" class="input" id="kg-search-input" placeholder="Highlight node (e.g. BASS, PMMA, DOC-01)..." style="max-width:290px;" />
+          </div>
+        </div>
+
+        <div class="kg-layout">
+          <div class="kg-canvas-wrap">
+            <canvas id="kg-canvas"></canvas>
+            <div class="kg-controls">
+              <button type="button" class="btn btn-sm" id="kg-zoom-in">+</button>
+              <button type="button" class="btn btn-sm" id="kg-zoom-out">−</button>
+              <button type="button" class="btn btn-sm" id="kg-reset">Reset</button>
+            </div>
+          </div>
+          <div class="card" id="kg-inspector" style="max-height:580px;overflow-y:auto;">
+            <div class="card-kicker">NODE INSPECTOR</div>
+            <h3 style="font-family:var(--font-display);margin:4px 0 8px;">Select a Node</h3>
+            <p class="text-sec" style="font-size:13px;">Click any node on the canvas to highlight its connected NASA experiments, materials, safety directives, and peer-reviewed papers.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- ── VIEW 8: NASA RESEARCH LIBRARY & LIVE WEB SYNC ──────────────── -->
+      <section class="view-panel" id="view-resources">
+        <div class="view-header">
+          <div>
+            <h1 class="view-title">NASA Research Library &amp; Live Web Sync</h1>
+            <p class="view-subtitle">Read full-text indexed NASA NTRS papers, ISS investigation briefs, 9 bundled NASA Glenn PDFs, and live-synced pages from official *.nasa.gov portals.</p>
+          </div>
+        </div>
+
+        <!-- Live NASA Website -> RAG Auto-Sync Panel -->
+        <div class="card mb-3" id="nasa-sync-panel">
+          <div class="flex items-center justify-between flex-wrap gap-3">
+            <div>
+              <div class="flex items-center gap-2 flex-wrap mb-1">
+                <span class="card-kicker" style="margin:0;">LIVE NASA WEB SYNC → RAG PIPELINE</span>
+                <span class="badge badge-sage" id="sync-status-badge">Checking sync engine...</span>
+              </div>
+              <div class="text-sec" style="font-size:12.5px;" id="sync-meta-line">
+                Automatically polls official NASA websites (nasa.gov, psi.nasa.gov, sma.nasa.gov, spinoff.nasa.gov &amp; NTRS API) and hot-swaps the RAG index whenever content changes.
+              </div>
+            </div>
+            <div class="flex items-center gap-2 flex-wrap">
+              <button type="button" class="btn btn-primary btn-sm" id="btn-sync-nasa-now">Sync NASA Websites</button>
+              <button type="button" class="btn btn-sm" id="btn-sync-nasa-force" title="Bypass ETag/Last-Modified cache and verify fresh bytes">Force Refresh</button>
+              <button type="button" class="btn btn-sm" id="btn-sync-toggle-list">Watched Sources</button>
+            </div>
+          </div>
+
+          <div id="sync-feedback-msg" class="text-sec" style="font-size:12px;margin-top:8px;display:none;"></div>
+
+          <div id="sync-sources-drawer" style="display:none;margin-top:14px;padding-top:14px;border-top:1px solid var(--border-subtle);">
+            <form id="sync-add-form" class="flex items-center gap-2 flex-wrap mb-3">
+              <input type="url" class="input" id="sync-add-url" placeholder="https://www.nasa.gov/... (official *.nasa.gov URL)" style="flex:2;min-width:240px;" required />
+              <input type="text" class="input" id="sync-add-title" placeholder="Optional label (e.g. NASA SoFIE Update)" style="flex:1;min-width:180px;" />
+              <button type="submit" class="btn btn-cyan btn-sm" id="btn-sync-add-url">+ Watch &amp; Sync URL</button>
+            </form>
+            <div class="data-table-wrap" style="max-height:300px;overflow-y:auto;">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>ID</th>
+                    <th>NASA Source</th>
+                    <th>Status</th>
+                    <th>Pages</th>
+                    <th>Last Checked</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody id="sync-sources-list"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <div class="card mb-3">
+          <div class="flex items-center justify-between flex-wrap gap-3">
+            <div class="pill-group">
+              <button type="button" class="pill-btn active" data-doc-filter="all" id="doc-filter-all-btn">All Documents</button>
+              <button type="button" class="pill-btn" data-doc-filter="live_nasa_web" id="doc-filter-live-btn">Live NASA Web</button>
+              <button type="button" class="pill-btn" data-doc-filter="nasa_paper">NASA NTRS Papers</button>
+              <button type="button" class="pill-btn" data-doc-filter="iss_investigation">ISS Investigations</button>
+              <button type="button" class="pill-btn" data-doc-filter="challenge_brief">Challenge Brief</button>
+            </div>
+            <input type="text" class="input" id="resources-search" placeholder="Search title, author, DOC-ID..." style="max-width:280px;" />
+          </div>
+        </div>
+
+        <div class="grid-3" id="resources-grid"></div>
+      </section>
+
+    </main>
   </div>
 
   <!-- ── Global Document Reader & Entity Detail Modal ──────────────────────── -->
@@ -670,6 +885,6 @@
     </div>
   </div>
 
-  <script type="module" src="/js/app.js"></script>
+  <script type="module" src="/js/app.js?v=11"></script>
 </body>
 </html>

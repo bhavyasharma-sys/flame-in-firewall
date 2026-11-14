@@ -4,7 +4,7 @@
  */
 
 import { api } from './api.js';
-import { chartThemeColors, esc, on, state } from './state.js';
+import { bindEditableSliderValue, chartThemeColors, esc, on, state } from './state.js';
 
 let weights = { similarity: 0.5, completeness: 0.2, criticality: 0.3 };
 let rankedRuns = [];
@@ -66,11 +66,20 @@ function bindRunControls() {
   const bindW = (id, key) => {
     const el = document.getElementById(id);
     if (!el) return;
-    el.addEventListener('input', () => {
-      weights[key] = parseFloat(el.value);
+    const applyWeight = (val) => {
+      weights[key] = val;
       const v = document.getElementById(`${id}-val`);
       if (v) v.textContent = weights[key].toFixed(2);
       refreshRunRanking();
+    };
+    el.addEventListener('input', () => applyWeight(parseFloat(el.value)));
+    bindEditableSliderValue({
+      sliderId: id,
+      min: 0,
+      max: null,
+      getValue: () => weights[key],
+      formatValue: (v) => v.toFixed(2),
+      onCommit: applyWeight,
     });
   };
   bindW('w-similarity', 'similarity');

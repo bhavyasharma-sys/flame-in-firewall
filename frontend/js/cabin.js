@@ -5,7 +5,7 @@
  */
 
 import { api } from './api.js';
-import { chartThemeColors, emit, esc, on, riskColor, setActiveCabin, state } from './state.js';
+import { bindEditableSliderValue, chartThemeColors, emit, esc, on, riskColor, setActiveCabin, state } from './state.js';
 
 let shapleyChart = null;
 let phaseCells = [];
@@ -127,23 +127,31 @@ function renderPresetButtons() {
 }
 
 function bindCabinControls() {
-  const bindNum = (id, key, suffix) => {
+  const bindNum = (id, key, suffix, minVal, maxVal) => {
     const el = document.getElementById(id);
     if (!el) return;
-    el.addEventListener('input', () => {
-      const v = parseFloat(el.value);
+    const applyVal = (v) => {
       const valEl = document.getElementById(`${id}-val`);
       if (valEl) valEl.textContent = `${v}${suffix}`;
       setActiveCabin({ [key]: v }, { silent: true });
       emit('cabin:pill-refresh', state.activeCabin);
       scheduleEvaluate();
+    };
+    el.addEventListener('input', () => applyVal(parseFloat(el.value)));
+    bindEditableSliderValue({
+      sliderId: id,
+      min: minVal,
+      max: maxVal,
+      getValue: () => state.activeCabin[key],
+      formatValue: (v) => `${v}${suffix}`,
+      onCommit: applyVal,
     });
   };
 
-  bindNum('cabin-o2', 'oxygen_pct', '%');
-  bindNum('cabin-pressure', 'pressure_kpa', ' kPa');
-  bindNum('cabin-flow', 'flow_velocity_cm_s', ' cm/s');
-  bindNum('cabin-gravity', 'gravity_g', ' g');
+  bindNum('cabin-o2', 'oxygen_pct', '%', 0, null);
+  bindNum('cabin-pressure', 'pressure_kpa', ' kPa', 0, null);
+  bindNum('cabin-flow', 'flow_velocity_cm_s', ' cm/s', 0, null);
+  bindNum('cabin-gravity', 'gravity_g', ' g', 0, null);
 
   document.getElementById('cabin-material')?.addEventListener('change', (e) => {
     setActiveCabin({ fuel_material: e.target.value }, { silent: true });
@@ -196,7 +204,11 @@ function syncControlsFromState() {
   const c = state.activeCabin;
   const setPair = (id, val, suffix) => {
     const el = document.getElementById(id);
-    if (el) el.value = String(val);
+    if (el) {
+      const sMin = Number(el.min);
+      const sMax = Number(el.max);
+      el.value = String(Math.min(sMax, Math.max(sMin, Number(val))));
+    }
     const v = document.getElementById(`${id}-val`);
     if (v) v.textContent = `${val}${suffix}`;
   };
