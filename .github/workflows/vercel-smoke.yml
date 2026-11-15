@@ -1,0 +1,25 @@
+name: Vercel production smoke
+
+on:
+  pull_request:
+    paths:
+      - .github/workflows/vercel-smoke.yml
+      - tests/smoke_deployment.py
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install smoke-check client only
+        run: python -m pip install "httpx>=0.27,<1"
+      - name: Verify public production endpoints and every bundled asset
+        run: python tests/smoke_deployment.py https://flame-in-firewall.vercel.app

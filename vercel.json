@@ -5,7 +5,7 @@
   "functions": {
     "api/index.py": {
       "includeFiles": "{data/knowledge_base/**,data/ember/**,frontend/**}",
-      "excludeFiles": "{.git/**,.venv/**,venv/**,.vercel/**,.cache/**,node_modules/**,tests/**,src/**,**/__pycache__/**,**/*.py[co],.env*,data/chromadb/**,data/*_cache.json,data/conversation_memory.json,data/user_settings.json}"
+      "excludeFiles": "{.git/**,.github/**,.venv/**,venv/**,.vercel/**,.cache/**,node_modules/**,tests/**,src/**,**/__pycache__/**,**/*.py[co],.env*,data/chromadb/**,data/*_cache.json,data/conversation_memory.json,data/user_settings.json}"
     }
   },
   "routes": [

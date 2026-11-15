@@ -118,16 +118,22 @@ Use the existing EAGLE project in the Vercel dashboard, or link this checkout wi
 Ensure the production URL is public in the project's Deployment Protection settings
 if Vercel authentication is enabled by the team's defaults.
 
-After Vercel reports **Ready**, check the returned public production URL:
+The public production URL is **https://flame-in-firewall.vercel.app**. After Vercel
+reports **Ready**, verify it with:
 
 ```bash
-python tests/smoke_deployment.py https://YOUR-PRODUCTION-URL.vercel.app
+python tests/smoke_deployment.py https://flame-in-firewall.vercel.app
 ```
 
 The smoke check validates health and data counts, stats, runs, documents,
-40-point telemetry, every shipped static asset/PDF (including body integrity),
-HEAD requests, and POST `/api/chat/suggestions` with and without an active scenario.
-Without an LLM key, suggestions correctly return `{"available": false, "queries": []}`.
+40-point telemetry for all 50 runs, every shipped static asset/PDF (including body
+integrity), HEAD requests, and POST `/api/chat/suggestions` with and without an
+active scenario. Without an LLM key, suggestions correctly return
+`{"available": false, "queries": []}`.
+
+`.github/workflows/vercel-smoke.yml` runs the same public HTTP checks on a GitHub
+runner when the smoke workflow/script changes in a PR, and can be run manually
+with **Run workflow** once merged into `main`. It requires no deployment credentials.
 
 Serverless instances have ephemeral filesystems and independent in-memory state.
 Conversation history, saved settings, and live NASA caches are **not durable or

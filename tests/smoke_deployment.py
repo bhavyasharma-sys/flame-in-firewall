@@ -23,11 +23,14 @@ def smoke_check(client) -> None:
     assert health["counts"]["documents"] >= 13, health["counts"]
     assert not health["live_nasa_sync"]["syncing"], health["live_nasa_sync"]
     assert get("/api/stats").json()["total_test_runs"] == 50
-    get("/api/runs")
+    runs = get("/api/runs").json()
+    assert runs["count"] == len(runs["runs"]) == 50, runs["count"]
     get("/api/documents")
-    telemetry = get("/api/telemetry/EXP-0001").json()
-    assert telemetry["experiment_id"] == "EXP-0001"
-    assert len(telemetry["time_s"]) == 40, telemetry.keys()
+    for run in runs["runs"]:
+        experiment_id = run["experiment_id"]
+        telemetry = get(f"/api/telemetry/{experiment_id}").json()
+        assert telemetry["experiment_id"] == experiment_id
+        assert len(telemetry["time_s"]) == 40, experiment_id
     assert "text/html" in get("/").headers["content-type"]
 
     # Check every shipped asset, including all nine PDFs and the vendored chart library.
