@@ -17,8 +17,9 @@ import sys
 import threading
 from typing import Any, Optional
 
-from fastapi import FastAPI, Header, HTTPException, Query
+from fastapi import FastAPI, Header, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -36,6 +37,7 @@ from config import (
     NASA_LIVE_SYNC_ENABLED,
     NASA_SYNC_ON_STARTUP,
     TOP_K_RESULTS,
+    USER_SETTINGS_FILE,
 )
 from core.ingestion import compute_corpus_digest, load_and_chunk_data
 from core.knowledge_graph import KnowledgeGraph
@@ -109,6 +111,20 @@ async def lifespan(_app: FastAPI):
                 pass
 
 
+class _SSESafeGZipMiddleware:
+    """Applies GZip compression to HTML/CSS/JS/JSON responses while bypassing SSE streams."""
+
+    def __init__(self, app, minimum_size: int = 500) -> None:
+        self.app = app
+        self.gzip = GZipMiddleware(app, minimum_size=minimum_size)
+
+    async def __call__(self, scope, receive, send) -> None:
+        if scope.get("type") == "http" and str(scope.get("path", "")).endswith("/stream"):
+            await self.app(scope, receive, send)
+            return
+        await self.gzip(scope, receive, send)
+
+
 app = FastAPI(title=APP_TITLE, version=APP_VERSION, lifespan=lifespan)
 
 allow_all = "*" in CORS_ORIGINS
@@ -119,15 +135,19 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.add_middleware(_SSESafeGZipMiddleware, minimum_size=500)
 
 
 @app.middleware("http")
-async def no_stale_app_shell_cache(request, call_next):
+async def smart_asset_cache_headers(request, call_next):
     response = await call_next(request)
     path = request.url.path
-    if path in ("/", "/sw.js", "/manifest.json") or (
-        (path.startswith("/js/") and not path.startswith("/js/vendor/"))
-        or path.startswith("/css/")
+    # Explicitly permit microphone capture on same-origin & embedded preview contexts
+    response.headers.setdefault("Permissions-Policy", "microphone=(self)")
+    if path.startswith("/js/vendor/") or path.startswith("/icons/") or path.startswith("/papers/"):
+        response.headers["Cache-Control"] = "public, max-age=86400"
+    elif path in ("/", "/sw.js", "/manifest.json") or (
+        path.startswith("/js/") or path.startswith("/css/")
     ):
         response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
     return response
@@ -161,6 +181,9 @@ class EngineState:
         self.vectorstore.build_index(chunks, digest=digest)
 
         self.llm = LLMClient()
+        self.user_preferences: dict[str, Any] = {}
+        self._saved_api_keys: dict[str, str] = {}
+        self._load_persisted_settings()
         self.memory = ConversationMemory()
         self.session_memories = SessionMemoryStore(default_memory=self.memory, max_sessions=256)
         self.rag = RAGPipeline(
@@ -175,6 +198,130 @@ class EngineState:
         }
         self.runs_by_id = {
             str(r["experiment_id"]).upper(): r for r in (self.all_data.get("test_runs") or [])
+        }
+
+    def _load_persisted_settings(self) -> None:
+        """Restore saved theme/font preferences and provider API keys on startup."""
+        if not os.path.exists(USER_SETTINGS_FILE):
+            return
+        try:
+            with open(USER_SETTINGS_FILE, "r", encoding="utf-8") as fh:
+                payload = json.load(fh)
+            if not isinstance(payload, dict):
+                return
+            prefs = payload.get("preferences")
+            if isinstance(prefs, dict):
+                self.user_preferences = dict(prefs)
+            creds = payload.get("credentials")
+            if isinstance(creds, dict):
+                keys = creds.get("api_keys") or {}
+                models = creds.get("models") or {}
+                if isinstance(keys, dict):
+                    self._saved_api_keys = {
+                        k: str(v).strip()
+                        for k, v in keys.items()
+                        if k in ("openai", "gemini", "groq", "openrouter") and str(v).strip()
+                    }
+                self.llm.update_credentials(
+                    preferred_provider=creds.get("preferred_provider"),
+                    openai_key=self._saved_api_keys.get("openai", ""),
+                    gemini_key=self._saved_api_keys.get("gemini", ""),
+                    groq_key=self._saved_api_keys.get("groq", ""),
+                    openrouter_key=self._saved_api_keys.get("openrouter", ""),
+                    openai_model=models.get("openai") if isinstance(models, dict) else None,
+                    gemini_model=models.get("gemini") if isinstance(models, dict) else None,
+                    groq_model=models.get("groq") if isinstance(models, dict) else None,
+                    openrouter_model=models.get("openrouter") if isinstance(models, dict) else None,
+                )
+        except Exception as exc:
+            logger.warning("Could not load persisted settings (%s); using defaults.", exc)
+
+    def save_user_settings(
+        self,
+        *,
+        preferences: Optional[dict[str, Any]] = None,
+        preferred_provider: Optional[str] = None,
+        api_keys: Optional[dict[str, Optional[str]]] = None,
+        models: Optional[dict[str, Optional[str]]] = None,
+    ) -> dict[str, Any]:
+        """Thread-safely apply and persist user preferences & API keys to data/user_settings.json."""
+        with self._rebuild_lock:
+            if isinstance(preferences, dict):
+                merged = dict(self.user_preferences)
+                for k, v in preferences.items():
+                    if isinstance(k, str) and len(k) <= 64:
+                        merged[k] = v
+                self.user_preferences = merged
+
+            if isinstance(api_keys, dict):
+                for provider in ("openai", "gemini", "groq", "openrouter"):
+                    if provider in api_keys:
+                        raw_val = api_keys[provider]
+                        if raw_val is None or str(raw_val).strip() == "":
+                            self._saved_api_keys.pop(provider, None)
+                        else:
+                            self._saved_api_keys[provider] = str(raw_val).strip()
+
+            model_updates = models if isinstance(models, dict) else {}
+            self.llm.update_credentials(
+                preferred_provider=preferred_provider,
+                openai_key=self._saved_api_keys.get("openai", ""),
+                gemini_key=self._saved_api_keys.get("gemini", ""),
+                groq_key=self._saved_api_keys.get("groq", ""),
+                openrouter_key=self._saved_api_keys.get("openrouter", ""),
+                openai_model=model_updates.get("openai"),
+                gemini_model=model_updates.get("gemini"),
+                groq_model=model_updates.get("groq"),
+                openrouter_model=model_updates.get("openrouter"),
+            )
+
+            persisted = {
+                "preferences": self.user_preferences,
+                "credentials": {
+                    "preferred_provider": self.llm.preferred_provider,
+                    "api_keys": self._saved_api_keys,
+                    "models": {
+                        "openai": self.llm.openai_model,
+                        "gemini": self.llm.gemini_model,
+                        "groq": self.llm.groq_model,
+                        "openrouter": self.llm.openrouter_model,
+                    },
+                },
+            }
+            os.makedirs(os.path.dirname(USER_SETTINGS_FILE), exist_ok=True)
+            tmp_path = f"{USER_SETTINGS_FILE}.tmp"
+            with open(tmp_path, "w", encoding="utf-8") as fh:
+                json.dump(persisted, fh, indent=2)
+            os.replace(tmp_path, USER_SETTINGS_FILE)
+            try:
+                os.chmod(USER_SETTINGS_FILE, 0o600)
+            except OSError:
+                pass
+            return self.get_public_settings()
+
+    def reset_user_settings(self) -> dict[str, Any]:
+        with self._rebuild_lock:
+            self.user_preferences = {}
+            self._saved_api_keys = {}
+            self.llm.update_credentials(
+                preferred_provider="auto",
+                openai_key="",
+                gemini_key="",
+                groq_key="",
+                openrouter_key="",
+            )
+            if os.path.exists(USER_SETTINGS_FILE):
+                try:
+                    os.remove(USER_SETTINGS_FILE)
+                except OSError:
+                    pass
+            return self.get_public_settings()
+
+    def get_public_settings(self) -> dict[str, Any]:
+        """Returns public preferences + masked provider key status (never leaks raw secrets)."""
+        return {
+            "preferences": dict(self.user_preferences),
+            "ai": self.llm.get_provider_status(),
         }
 
     def apply_live_documents(self, live_docs: list[dict[str, Any]]) -> dict[str, Any]:
@@ -978,6 +1125,328 @@ def clear_memory(
     return {"message": "Conversation memory cleared"}
 
 
+class UserSettingsPayload(BaseModel):
+    preferences: Optional[dict[str, Any]] = None
+    preferred_provider: Optional[str] = None
+    api_keys: Optional[dict[str, Optional[str]]] = None
+    models: Optional[dict[str, Optional[str]]] = None
+
+
+@app.get("/api/settings")
+def get_user_settings() -> dict[str, Any]:
+    return engine.get_public_settings()
+
+
+@app.post("/api/settings")
+def update_user_settings(req: UserSettingsPayload) -> dict[str, Any]:
+    return engine.save_user_settings(
+        preferences=req.preferences,
+        preferred_provider=req.preferred_provider,
+        api_keys=req.api_keys,
+        models=req.models,
+    )
+
+
+class ModelDiscoveryPayload(BaseModel):
+    provider: str = Field(..., min_length=2, max_length=32)
+    api_key: Optional[str] = None
+
+
+_OPENAI_NON_CHAT_PREFIXES = (
+    "text-embedding",
+    "embedding",
+    "whisper",
+    "tts-",
+    "dall-e",
+    "text-moderation",
+    "omni-moderation",
+    "babbage-",
+    "davinci-",
+    "gpt-image",
+    "sora",
+)
+
+
+def _rank_openai_model(mid: str) -> tuple[int, str]:
+    low = mid.lower()
+    if low.startswith(("gpt-5", "gpt-4.1", "gpt-4o", "o4-", "o3-", "o1-")):
+        return (0, low)
+    if low.startswith(("gpt-4", "chatgpt-")):
+        return (1, low)
+    if low.startswith("gpt-3.5"):
+        return (2, low)
+    if any(low.startswith(p) for p in _OPENAI_NON_CHAT_PREFIXES):
+        return (9, low)
+    return (3, low)
+
+
+def _rank_gemini_model(mid: str) -> tuple[int, str]:
+    low = mid.lower()
+    if low.startswith("gemini-2.5"):
+        return (0, low)
+    if low.startswith("gemini-2.0"):
+        return (1, low)
+    if low.startswith("gemini-1.5"):
+        return (2, low)
+    if low.startswith("gemini"):
+        return (3, low)
+    return (5, low)
+
+
+def _rank_groq_model(mid: str) -> tuple[int, str]:
+    low = mid.lower()
+    if "whisper" in low or "tts" in low or "guard" in low:
+        return (8, low)
+    if low.startswith(("llama-3.3", "llama-4", "qwen", "deepseek")):
+        return (0, low)
+    if low.startswith(("llama-", "meta-llama/", "mixtral", "gemma", "compound")):
+        return (1, low)
+    return (2, low)
+
+
+async def _fetch_provider_models_http(provider: str, api_key: str) -> list[dict[str, Any]]:
+    """Queries the provider's official models endpoint using the supplied API key."""
+    import httpx
+
+    async with httpx.AsyncClient(timeout=15.0, follow_redirects=True) as client:
+        if provider == "openai":
+            resp = await client.get(
+                "https://api.openai.com/v1/models",
+                headers={"Authorization": f"Bearer {api_key}"},
+            )
+            resp.raise_for_status()
+            raw = resp.json().get("data") or []
+            out = []
+            seen = set()
+            for item in raw:
+                mid = str(item.get("id") or "").strip()
+                if not mid or mid in seen:
+                    continue
+                seen.add(mid)
+                low = mid.lower()
+                is_non_chat = any(low.startswith(p) for p in _OPENAI_NON_CHAT_PREFIXES)
+                out.append({
+                    "id": mid,
+                    "label": mid,
+                    "owned_by": str(item.get("owned_by") or "openai"),
+                    "category": "media/embed" if is_non_chat else "chat",
+                })
+            out.sort(key=lambda m: _rank_openai_model(m["id"]))
+            return out
+
+        if provider == "gemini":
+            resp = await client.get(
+                "https://generativelanguage.googleapis.com/v1beta/models",
+                params={"key": api_key, "pageSize": 200},
+            )
+            resp.raise_for_status()
+            raw = resp.json().get("models") or []
+            out = []
+            seen = set()
+            for item in raw:
+                methods = item.get("supportedGenerationMethods") or []
+                if methods and "generateContent" not in methods:
+                    continue
+                full_name = str(item.get("name") or "").strip()
+                mid = full_name.split("models/", 1)[-1] if "models/" in full_name else full_name
+                if not mid or mid in seen:
+                    continue
+                seen.add(mid)
+                display = str(item.get("displayName") or mid).strip()
+                ctx = item.get("inputTokenLimit")
+                out.append({
+                    "id": mid,
+                    "label": f"{display} ({mid})" if display.lower() != mid.lower() else mid,
+                    "owned_by": "google",
+                    "context_length": int(ctx) if isinstance(ctx, (int, float)) else None,
+                    "category": "chat",
+                })
+            out.sort(key=lambda m: _rank_gemini_model(m["id"]))
+            return out
+
+        if provider == "groq":
+            resp = await client.get(
+                "https://api.groq.com/openai/v1/models",
+                headers={"Authorization": f"Bearer {api_key}"},
+            )
+            resp.raise_for_status()
+            raw = resp.json().get("data") or []
+            out = []
+            seen = set()
+            for item in raw:
+                if item.get("active") is False:
+                    continue
+                mid = str(item.get("id") or "").strip()
+                if not mid or mid in seen:
+                    continue
+                seen.add(mid)
+                ctx = item.get("context_window")
+                low = mid.lower()
+                cat = "audio/guard" if ("whisper" in low or "tts" in low or "guard" in low) else "chat"
+                out.append({
+                    "id": mid,
+                    "label": mid,
+                    "owned_by": str(item.get("owned_by") or "groq"),
+                    "context_length": int(ctx) if isinstance(ctx, (int, float)) else None,
+                    "category": cat,
+                })
+            out.sort(key=lambda m: _rank_groq_model(m["id"]))
+            return out
+
+        if provider == "openrouter":
+            resp = await client.get(
+                "https://openrouter.ai/api/v1/models",
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "HTTP-Referer": "http://localhost:8000",
+                    "X-Title": "Ignis",
+                },
+            )
+            resp.raise_for_status()
+            raw = resp.json().get("data") or []
+            out = []
+            seen = set()
+            for item in raw:
+                mid = str(item.get("id") or "").strip()
+                if not mid or mid in seen:
+                    continue
+                seen.add(mid)
+                name = str(item.get("name") or mid).strip()
+                ctx = item.get("context_length")
+                out.append({
+                    "id": mid,
+                    "label": f"{name} — {mid}" if name.lower() != mid.lower() else mid,
+                    "owned_by": mid.split("/", 1)[0] if "/" in mid else "openrouter",
+                    "context_length": int(ctx) if isinstance(ctx, (int, float)) else None,
+                    "category": "chat",
+                })
+            out.sort(key=lambda m: (0 if ":free" in m["id"] else 1, m["id"].lower()))
+            return out
+
+    raise HTTPException(status_code=422, detail=f"Unsupported provider: {provider}")
+
+
+@app.post("/api/settings/models")
+async def discover_provider_models(req: ModelDiscoveryPayload) -> dict[str, Any]:
+    """Extracts all available models directly from the selected provider API key."""
+    provider = req.provider.strip().lower()
+    if provider not in ("openai", "gemini", "groq", "openrouter"):
+        raise HTTPException(
+            status_code=422,
+            detail="Provider must be one of: openai, gemini, groq, openrouter",
+        )
+
+    saved_keys = {
+        "openai": engine.llm.openai_key,
+        "gemini": engine.llm.gemini_key,
+        "groq": engine.llm.groq_key,
+        "openrouter": engine.llm.openrouter_key,
+    }
+    current_models = {
+        "openai": engine.llm.openai_model,
+        "gemini": engine.llm.gemini_model,
+        "groq": engine.llm.groq_model,
+        "openrouter": engine.llm.openrouter_model,
+    }
+
+    key = (req.api_key or "").strip() or (saved_keys.get(provider) or "").strip()
+    if not key or key.startswith("your_"):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Enter or save a {provider.upper()} API key first to extract available models.",
+        )
+
+    try:
+        models = await _fetch_provider_models_http(provider, key)
+        return {
+            "provider": provider,
+            "count": len(models),
+            "current_model": current_models.get(provider, ""),
+            "models": models,
+            "error": None,
+        }
+    except HTTPException:
+        raise
+    except Exception as exc:
+        import httpx
+
+        if isinstance(exc, httpx.HTTPStatusError):
+            code = exc.response.status_code
+            if code in (401, 403):
+                raise HTTPException(
+                    status_code=401,
+                    detail=f"{provider.upper()} rejected this API key (HTTP {code}). Check that the key is valid.",
+                )
+            raise HTTPException(
+                status_code=502,
+                detail=f"{provider.upper()} model list request failed (HTTP {code}).",
+            )
+        raise HTTPException(
+            status_code=502,
+            detail=f"Could not reach {provider.upper()} models API ({type(exc).__name__}).",
+        )
+
+
+@app.post("/api/settings/reset")
+def reset_user_settings() -> dict[str, Any]:
+    return engine.reset_user_settings()
+
+
+@app.post("/api/transcribe")
+async def transcribe_audio(request: Request) -> dict[str, Any]:
+    """Optional server-side Whisper transcription fallback when browser SpeechRecognition is unavailable."""
+    audio_bytes = await request.body()
+    if not audio_bytes:
+        return {"transcript": "", "provider": "none", "error": "empty_audio"}
+    if len(audio_bytes) > 8 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="Audio recording exceeds 8 MB limit")
+
+    content_type = (request.headers.get("content-type") or "audio/webm").split(";")[0].strip()
+    ext = "webm"
+    if "mp4" in content_type or "m4a" in content_type:
+        ext = "m4a"
+    elif "ogg" in content_type:
+        ext = "ogg"
+    elif "wav" in content_type:
+        ext = "wav"
+
+    groq_key = (engine.llm.groq_key or os.getenv("GROQ_API_KEY", "")).strip()
+    openai_key = (engine.llm.openai_key or os.getenv("OPENAI_API_KEY", "")).strip()
+    if groq_key.startswith("your_"):
+        groq_key = ""
+    if openai_key.startswith("your_"):
+        openai_key = ""
+    if not groq_key and not openai_key:
+        return {"transcript": "", "provider": "none", "error": "no_server_stt_key"}
+
+    endpoint = (
+        "https://api.groq.com/openai/v1/audio/transcriptions"
+        if groq_key
+        else "https://api.openai.com/v1/audio/transcriptions"
+    )
+    api_key = groq_key or openai_key
+    model = "whisper-large-v3-turbo" if groq_key else "whisper-1"
+    provider_name = "groq_whisper" if groq_key else "openai_whisper"
+
+    try:
+        import httpx
+
+        async with httpx.AsyncClient(timeout=20.0) as client:
+            resp = await client.post(
+                endpoint,
+                headers={"Authorization": f"Bearer {api_key}"},
+                data={"model": model, "language": "en"},
+                files={"file": (f"dictation.{ext}", audio_bytes, content_type)},
+            )
+        if resp.status_code == 200:
+            data = resp.json()
+            return {"transcript": (data.get("text") or "").strip(), "provider": provider_name}
+        return {"transcript": "", "provider": provider_name, "error": f"http_{resp.status_code}"}
+    except Exception as exc:
+        logger.warning("Server audio transcription failed: %s", exc)
+        return {"transcript": "", "provider": provider_name, "error": str(exc)}
+
+
 # ── Static Frontend & NASA PDF Papers ─────────────────────────────────────────
 if os.path.isdir(FRONTEND_DIR):
     for sub in ("css", "js", "papers", "icons"):
@@ -999,6 +1468,9 @@ if os.path.isdir(FRONTEND_DIR):
 
     @app.get("/favicon.ico")
     def serve_favicon():
+        ico_path = os.path.join(FRONTEND_DIR, "favicon.ico")
+        if os.path.exists(ico_path):
+            return FileResponse(ico_path, media_type="image/x-icon")
         svg_path = os.path.join(FRONTEND_DIR, "icons", "icon.svg")
         if os.path.exists(svg_path):
             return FileResponse(svg_path, media_type="image/svg+xml")

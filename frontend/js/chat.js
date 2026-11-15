@@ -28,7 +28,7 @@ const QUICK_PROMPTS = [
   },
   {
     label: 'NASA Challenge Brief',
-    prompt: 'What is the Flame in Freefall NASA Space Apps Challenge brief, objectives, and expected impact?',
+    prompt: 'What is the Ignis NASA Space Apps Challenge brief, objectives, and expected impact?',
   },
   {
     label: 'Out-of-Scope Safeguard Test',
@@ -40,8 +40,6 @@ export function initChat() {
   renderQuickPrompts();
   updateScenarioContextPreview();
 
-  const sendBtn = document.getElementById('chat-send-btn');
-  const input = document.getElementById('chat-input');
   const clearBtn = document.getElementById('chat-clear-btn');
   const scenarioToggle = document.getElementById('chat-include-scenario');
 
@@ -52,19 +50,6 @@ export function initChat() {
       updateScenarioContextPreview();
     });
   }
-
-  sendBtn?.addEventListener('click', () => {
-    const text = input?.value?.trim();
-    if (text) sendMessage(text);
-  });
-
-  input?.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      const text = input.value.trim();
-      if (text) sendMessage(text);
-    }
-  });
 
   clearBtn?.addEventListener('click', async () => {
     try {
@@ -82,12 +67,11 @@ export function initChat() {
   on('cabin:changed', updateScenarioContextPreview);
   on('cabin:pill-refresh', updateScenarioContextPreview);
 
-  on('chat:ask', (question) => {
-    emit('navigate', 'chat');
-    if (question) sendMessage(question);
-  });
-
   appendWelcomeMessage();
+}
+
+export function askChatQuestion(question) {
+  if (question) sendMessage(question);
 }
 
 function appendWelcomeMessage() {
@@ -140,11 +124,9 @@ export async function sendMessage(text) {
   if (isStreaming || !text.trim()) return;
   isStreaming = true;
 
-  const input = document.getElementById('chat-input');
-  const sendBtn = document.getElementById('chat-send-btn');
+  const dockSendBtn = document.getElementById('mi-send-btn');
   const msgs = document.getElementById('chat-messages');
-  if (input) input.value = '';
-  if (sendBtn) sendBtn.disabled = true;
+  if (dockSendBtn) dockSendBtn.disabled = true;
 
   // User message
   const userRow = document.createElement('div');
@@ -242,7 +224,7 @@ export async function sendMessage(text) {
     bubble.innerHTML = `<span style="color:var(--risk-crit);">Stream error: ${esc(err.message)}</span>`;
   } finally {
     isStreaming = false;
-    if (sendBtn) sendBtn.disabled = false;
+    if (dockSendBtn) dockSendBtn.disabled = false;
     msgs.scrollTop = msgs.scrollHeight;
   }
 }

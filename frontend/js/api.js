@@ -92,6 +92,16 @@ export const api = {
   documents: () => jsonFetch('/api/documents'),
   documentDetail: (docId) => jsonFetch(`/api/documents/${encodeURIComponent(docId)}`),
 
+  getSettings: () => jsonFetch('/api/settings'),
+  saveSettings: (payload) =>
+    jsonFetch('/api/settings', { method: 'POST', body: JSON.stringify(payload) }),
+  discoverModels: (provider, apiKey = '') =>
+    jsonFetch('/api/settings/models', {
+      method: 'POST',
+      body: JSON.stringify({ provider, api_key: apiKey || null }),
+    }),
+  resetSettings: () => jsonFetch('/api/settings/reset', { method: 'POST' }),
+
   syncStatus: () => jsonFetch('/api/sync/status'),
   syncNasaNow: ({ force = false, doc_id = null } = {}) =>
     jsonFetch('/api/sync/nasa', {

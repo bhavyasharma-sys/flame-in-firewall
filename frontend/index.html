@@ -1,41 +1,73 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="light">
+<html lang="en" data-theme="dark">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Flame in Freefall — NASA Microgravity Fire Safety Intelligence</title>
-  <meta name="description" content="NASA Space Apps Challenge 2026: Microgravity combustion digital twin, exact Shapley cabin fire safety configurator, 50-run NASA telemetry ranker, Hybrid Graph-RAG FlameAI Co-Pilot, Knowledge Graph, and NASA Research Library." />
-  <link rel="icon" href="/icons/icon.svg" type="image/svg+xml" />
+  <title>Ignis — NASA Microgravity Fire Safety Intelligence</title>
+  <meta name="description" content="Ignis — NASA Space Apps Challenge 2026: Microgravity combustion digital twin, exact Shapley cabin fire safety configurator, 50-run NASA telemetry ranker, Hybrid Graph-RAG FlameAI Co-Pilot, Knowledge Graph, and NASA Research Library." />
+  <link rel="icon" href="/icons/icon-192.png?v=2" type="image/png" />
+  <link rel="icon" href="/icons/icon.svg?v=2" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="/icons/icon-192.png?v=2" />
   <link rel="manifest" href="/manifest.json" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/css/styles.css?v=11" />
+  <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" />
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" media="print" onload="this.media='all'" />
+  <noscript><link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" /></noscript>
+  <link rel="preload" as="image" href="/icons/ignis-logo-256.png" />
+  <link rel="modulepreload" href="/js/glass-intro.js" />
+  <link rel="stylesheet" href="/css/styles.css?v=20" />
+  <noscript><style>#intro-splash { display: none !important; }</style></noscript>
   <script>
     (function () {
+      var p = {};
+      try { p = JSON.parse(localStorage.getItem('ignis_prefs_v1') || '{}') || {}; } catch (e) {}
       var saved = null;
-      try { saved = localStorage.getItem('fif_theme_v2'); } catch (e) {}
-      var t = saved === 'dark' ? 'dark' : 'light';
-      document.documentElement.setAttribute('data-theme', t);
+      try { saved = localStorage.getItem('ignis_theme_v3'); } catch (e) {}
+      var pal = p.palette || (saved === 'light' ? 'warm-paper' : 'obsidian-ember');
+      var mode = pal === 'warm-paper' ? 'light' : 'dark';
+      var r = document.documentElement;
+      r.setAttribute('data-theme', mode);
+      r.setAttribute('data-palette', pal);
+      if (p.font) r.setAttribute('data-font', p.font);
+      if (p.scale) r.setAttribute('data-scale', p.scale);
+      if (p.radius) r.setAttribute('data-radius', p.radius);
+      if (p.ambientGlow === false) r.setAttribute('data-glow', 'off');
+      if (p.scrollAnim === false) r.setAttribute('data-scroll-anim', 'off');
+      window.__ignisSkipIntro = p.showIntro === false;
     })();
   </script>
-  <script src="/js/vendor/chart.umd.min.js" defer></script>
 </head>
-<body>
+<body class="intro-active">
+  <!-- ── WebGL2 Glass Droplet Logo Entrance Splash (instant Ignis logo at 0ms -> seamless WebGL2 refraction) ── -->
+  <div class="intro-splash" id="intro-splash" role="region" aria-label="Ignis logo entrance">
+    <div class="intro-stage" id="intro-stage">
+      <img class="intro-instant-logo" src="/icons/ignis-logo-256.png" alt="" aria-hidden="true" decoding="sync" fetchpriority="high" />
+    </div>
+    <button type="button" class="intro-skip-btn" id="intro-skip-btn" aria-label="Skip intro animation">Skip</button>
+  </div>
+  <script type="module">
+    import { playGlassIntro } from '/js/glass-intro.js';
+    if (window.__ignisSkipIntro) {
+      document.getElementById('intro-splash')?.remove();
+      document.body.classList.remove('intro-active');
+    } else {
+      const t = document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
+      playGlassIntro({ theme: t });
+    }
+  </script>
+
   <div class="app-shell">
     <!-- ── Floating Pill Top Navigation Bar ────────────────────────────────── -->
     <div class="floating-nav-wrap">
       <header class="floating-nav">
         <button type="button" class="brand-link" id="brand-home-link" aria-label="Go to Dashboard">
           <span class="brand-mark" aria-hidden="true">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M12 2c.5 4.2-3 6.2-3 10a5 5 0 0 0 10 0c0-3.2-2-5.4-3-7-1 2.2-2.6 2.7-4-3Z"/>
-              <path d="M12 17a2 2 0 0 1-2-2c0-1.2 1-2 2-3.2 1 1.2 2 2 2 3.2a2 2 0 0 1-2 2Z"/>
-            </svg>
+            <img class="brand-logo-img" src="/icons/ignis-logo-256.png" alt="" />
           </span>
           <span>
-            <span class="brand-title" style="display:block;">Flame in Freefall</span>
-            <span class="brand-sub" style="display:block;">NASA Space Apps</span>
+            <span class="brand-title" style="display:block;">Ignis</span>
+            <span class="brand-sub" style="display:block;">NASA Fire Safety</span>
           </span>
         </button>
 
@@ -51,7 +83,14 @@
         </nav>
 
         <div class="nav-actions">
-          <button type="button" class="theme-toggle" id="theme-toggle-btn" role="switch" aria-checked="false" title="Switch between Light and Dark theme" aria-label="Toggle Theme">
+          <button type="button" class="nav-icon-btn" id="nav-settings-btn" data-tab="settings" title="Settings — Themes, Fonts & API Keys" aria-label="Open Settings">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <circle cx="12" cy="12" r="3"/>
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+            </svg>
+          </button>
+
+          <button type="button" class="theme-toggle" id="theme-toggle-btn" role="switch" aria-checked="true" title="Switch between Light and Dark theme" aria-label="Toggle Theme">
             <span class="toggle-thumb"></span>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/></svg>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
@@ -79,6 +118,7 @@
       <button type="button" class="nav-item" data-tab="chat">FlameAI Co-Pilot</button>
       <button type="button" class="nav-item" data-tab="graph">Knowledge Graph</button>
       <button type="button" class="nav-item" data-tab="resources">NASA Library &amp; PDFs</button>
+      <button type="button" class="nav-item" data-tab="settings">Settings &amp; API Keys</button>
     </div>
 
     <!-- ── Subtle Context Ribbon (Search + Engine Status + Shared Cabin Pill) ── -->
@@ -108,189 +148,233 @@
     <!-- ── Main Views Container ────────────────────────────────────────────── -->
     <main class="content-wrap">
 
-      <!-- ── VIEW 1: EDITORIAL HERO DASHBOARD ──────────────────────────────── -->
+      <!-- ── VIEW 1: OBSIDIAN HORIZON HOMEPAGE & TELEMETRY DASHBOARD ───────── -->
       <section class="view-panel active" id="view-dashboard">
-        <!-- Hero Banner + Interactive Prompt Box -->
-        <div class="hero-section">
-          <div class="hero-eyebrow">
-            <span class="hero-eyebrow-tag">NASA PSI DATA</span>
-            <span>BASS · ACME · SAFFIRE · SoFIE · FLEX</span>
+        <!-- Hero Banner with Diagonal Volumetric Light & Molten Horizon Arc -->
+        <div class="hero-section ignis-hero" data-enter>
+          <div class="ignis-hero-rays" aria-hidden="true"></div>
+
+          <div class="hero-eyebrow ignis-pill-badge">
+            <span class="ignis-pill-dot" aria-hidden="true"></span>
+            <span>NASA Microgravity Fire Intelligence</span>
           </div>
 
-          <h1 class="hero-title">Flame in Freefall</h1>
+          <h1 class="hero-title ignis-hero-headline">
+            <span class="ignis-headline-white">Transform Space Fire Data Into</span>
+            <span class="ignis-headline-ember">Actionable Mission Safety</span>
+          </h1>
 
-          <p class="hero-subtitle">
-            Microgravity combustion physics, habitat fire-risk modeling, and citation-verified insights synthesized from decades of NASA spaceflight investigations.
+          <p class="hero-subtitle ignis-hero-sub">
+            Unlock decades of NASA microgravity combustion research with a real-time 3D WebGL2 flame twin, exact Shapley habitat risk modeling, and citation-verified FlameAI.
           </p>
 
-          <div class="hero-prompt-box">
-            <textarea
-              id="hero-prompt-input"
-              class="hero-prompt-textarea"
-              maxlength="4000"
-              rows="2"
-              placeholder="Ask FlameAI about microgravity flame sphericity, Artemis 34% O₂ flammability, SAFFIRE findings, or request a chart..."
-            ></textarea>
-            <div class="hero-prompt-footer">
-              <div class="hero-prompt-starters">
-                <button type="button" class="pill-btn" data-hero-prompt="Why do flames become spherical in microgravity?">Spherical Flames</button>
-                <button type="button" class="pill-btn" data-hero-prompt="What did SAFFIRE teach us about spacecraft fire spread?">SAFFIRE Tests</button>
-              </div>
-              <button type="button" class="hero-send-btn" id="hero-prompt-submit" aria-label="Ask FlameAI">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>
-              </button>
-            </div>
+          <div class="ignis-hero-ctas">
+            <button type="button" class="ignis-cta-primary" data-jump-tab="twin">
+              Launch 3D Flame Twin
+            </button>
+            <button type="button" class="ignis-cta-secondary" data-jump-tab="chat">
+              Open FlameAI Co-Pilot
+            </button>
           </div>
 
           <div class="hero-chips">
+            <button type="button" class="hero-chip" data-hero-prompt="Why do flames become spherical in microgravity?">Spherical Flames</button>
+            <button type="button" class="hero-chip" data-hero-prompt="What did SAFFIRE teach us about spacecraft fire spread?">SAFFIRE Tests</button>
             <button type="button" class="hero-chip" data-hero-prompt="Explain the cool-flame regime observed in FLEX-2">Cool-Flame Regime</button>
             <button type="button" class="hero-chip" data-hero-prompt="Fire safety risk of PMMA in lunar 34% O2 exploration atmosphere">Lunar 34% O₂ Risk</button>
             <button type="button" class="hero-chip" data-hero-prompt="Why is Nomex safer than cotton-fiberglass in space habitats?">Nomex vs Cotton</button>
-            <button type="button" class="hero-chip" data-hero-prompt="Why is cabin ventilation shutdown the first fire response protocol?">Ventilation Shutdown</button>
+          </div>
+
+          <!-- Signature Molten-Orange Planetary Horizon Eclipse Arc -->
+          <div class="ignis-horizon-wrap" aria-hidden="true">
+            <div class="ignis-horizon-stage" id="ignis-horizon-stage">
+              <div class="ignis-horizon-corona"></div>
+              <svg class="ignis-horizon-svg" viewBox="0 0 1200 190" preserveAspectRatio="none">
+                <defs>
+                  <linearGradient id="ignis-arc-stroke" x1="0%" y1="0%" x2="100%" y2="0%">
+                    <stop offset="0%" style="stop-color:var(--accent-flame);stop-opacity:0"/>
+                    <stop offset="16%" style="stop-color:var(--accent-flame);stop-opacity:0.58"/>
+                    <stop offset="50%" style="stop-color:var(--accent-flame-hi, #ff9b54);stop-opacity:1"/>
+                    <stop offset="84%" style="stop-color:var(--accent-flame);stop-opacity:0.58"/>
+                    <stop offset="100%" style="stop-color:var(--accent-flame);stop-opacity:0"/>
+                  </linearGradient>
+                  <linearGradient id="ignis-arc-glow" x1="0%" y1="0%" x2="100%" y2="0%">
+                    <stop offset="0%" style="stop-color:var(--accent-flame);stop-opacity:0"/>
+                    <stop offset="22%" style="stop-color:var(--accent-flame);stop-opacity:0.45"/>
+                    <stop offset="50%" style="stop-color:var(--accent-flame-hover);stop-opacity:0.92"/>
+                    <stop offset="78%" style="stop-color:var(--accent-flame);stop-opacity:0.45"/>
+                    <stop offset="100%" style="stop-color:var(--accent-flame);stop-opacity:0"/>
+                  </linearGradient>
+                  <filter id="ignis-arc-blur" x="-10%" y="-80%" width="120%" height="260%">
+                    <feGaussianBlur stdDeviation="8"/>
+                  </filter>
+                  <radialGradient id="ignis-planet-mask" cx="50%" cy="100%" r="65%">
+                    <stop offset="0%" stop-color="#060504" stop-opacity="1"/>
+                    <stop offset="100%" stop-color="#060504" stop-opacity="1"/>
+                  </radialGradient>
+                </defs>
+                <!-- Soft glowing atmospheric bloom along the rim -->
+                <path d="M -20 175 Q 600 -24 1220 175" fill="none" stroke="url(#ignis-arc-glow)" stroke-width="14" filter="url(#ignis-arc-blur)"/>
+                <!-- Dark planetary curvature shadow beneath the arc -->
+                <path d="M -20 176 Q 600 -22 1220 176 L 1220 200 L -20 200 Z" fill="var(--bg-app)"/>
+                <!-- Razor-sharp molten horizon rim -->
+                <path d="M -20 175 Q 600 -24 1220 175" fill="none" stroke="url(#ignis-arc-stroke)" stroke-width="2.6"/>
+              </svg>
+            </div>
+          </div>
+
+          <!-- NASA Flight Program Trust Strip -->
+          <div class="ignis-marquee-wrap" data-reveal="fade">
+            <div class="ignis-marquee-label">Synthesized from flagship NASA microgravity combustion investigations</div>
+            <div class="ignis-mission-strip">
+              <span class="ignis-mission-logo">SoFIE</span>
+              <span class="ignis-mission-logo is-bright">SAFFIRE</span>
+              <span class="ignis-mission-logo is-bright">BASS-II</span>
+              <span class="ignis-mission-logo is-bright">FLEX-2</span>
+              <span class="ignis-mission-logo">ACME</span>
+              <span class="ignis-mission-logo">SLICE</span>
+              <span class="ignis-mission-logo">NASA Glenn</span>
+            </div>
           </div>
         </div>
 
-        <!-- 4 Clean Metric Cards -->
-        <div class="grid-4 mb-3" id="dashboard-kpis"></div>
+        <!-- Section 2: Core Capabilities ("Ignis Mission Suite") -->
+        <section class="ignis-section" data-reveal="up">
+          <div class="ignis-section-head">
+            <div class="ignis-pill-badge ignis-pill-sm">Take Full Control of Habitat Fire Safety</div>
+            <h2 class="ignis-section-title">
+              <span>Ignis</span> <span class="ignis-title-ember">Mission Suite</span>
+            </h2>
+            <p class="ignis-section-sub">
+              Aerospace engineers and mission planners simulate orbital combustion, quantify risk drivers, and audit NASA literature in one unified obsidian workspace.
+            </p>
+          </div>
+
+          <div class="ignis-cap-grid" data-reveal-stagger="90">
+            <article class="ignis-cap-card" data-jump-tab="twin" tabindex="0" role="button">
+              <div class="ignis-cap-topbar" aria-hidden="true"></div>
+              <div class="ignis-cap-icon" aria-hidden="true">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M12 2c.5 4.2-3 6.2-3 10a5 5 0 0 0 10 0c0-3.2-2-5.4-3-7-1 2.2-2.6 2.7-4-3Z"/>
+                  <path d="M12 17a2 2 0 0 1-2-2c0-1.2 1-2 2-3.2 1 1.2 2 2 2 3.2a2 2 0 0 1-2 2Z"/>
+                </svg>
+              </div>
+              <h3 class="ignis-cap-title">3D Flame Digital Twin</h3>
+              <p class="ignis-cap-desc">
+                Real-time 60 FPS WebGL2 volumetric combustion modeling 0g spherical diffusion shells, FLEX-2 cool flames, and uncapped custom physics regimes.
+              </p>
+              <span class="ignis-cap-link">Launch 3D Chamber →</span>
+            </article>
+
+            <article class="ignis-cap-card" data-jump-tab="cabin" tabindex="0" role="button">
+              <div class="ignis-cap-topbar" aria-hidden="true"></div>
+              <div class="ignis-cap-icon" aria-hidden="true">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M3 3v18h18"/><rect x="7" y="10" width="3" height="7" rx="1"/><rect x="12" y="6" width="3" height="11" rx="1"/><rect x="17" y="13" width="3" height="4" rx="1"/>
+                </svg>
+              </div>
+              <h3 class="ignis-cap-title">Exact 2⁵ Shapley Risk Lab</h3>
+              <p class="ignis-cap-desc">
+                Quantify flammability shifts across ISS, Lunar 0.16g (34% O₂), and Martian habitats with exact cooperative Shapley attributions and (O₂, P) phase maps.
+              </p>
+              <span class="ignis-cap-link">Open Safety Lab →</span>
+            </article>
+
+            <article class="ignis-cap-card" data-jump-tab="graph" tabindex="0" role="button">
+              <div class="ignis-cap-topbar" aria-hidden="true"></div>
+              <div class="ignis-cap-icon" aria-hidden="true">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="12" cy="12" r="3"/><circle cx="19" cy="5" r="2.2"/><circle cx="5" cy="19" r="2.2"/><circle cx="5" cy="5" r="2.2"/><path d="M14.2 9.8 17.4 6.6M9.8 14.2 6.6 17.4M9.8 9.8 6.6 6.6"/>
+                </svg>
+              </div>
+              <h3 class="ignis-cap-title">Telemetry &amp; Knowledge Graph</h3>
+              <p class="ignis-cap-desc">
+                Rank 50 NASA PSI proxy runs with Bento GlowCards and traverse 227 semantic nodes across an infinite interactive Blueprint workspace.
+              </p>
+              <span class="ignis-cap-link">Explore Blueprint Graph →</span>
+            </article>
+          </div>
+        </section>
+
+        <!-- Section 3: Split Decision-Making Showcase ("Data Insights") -->
+        <section class="ignis-section ignis-insights-split">
+          <div class="ignis-insights-copy" data-reveal="left">
+            <div class="ignis-eyebrow-ember">Data Insights</div>
+            <h2 class="ignis-insights-title">Improved mission decision-making</h2>
+            <p class="ignis-insights-desc">
+              By fusing live NASA NTRS &amp; website updates with exact combustion physics and sentence-level citation verification, crews and safety engineers eliminate guesswork.
+            </p>
+
+            <div class="ignis-insights-list" data-reveal-stagger="85">
+              <div class="ignis-insights-row" data-jump-tab="ranking" role="button" tabindex="0">
+                <span class="ignis-row-icon" aria-hidden="true">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M7 15v-3M12 15V9M17 15v-5"/></svg>
+                </span>
+                <div>
+                  <h4>Comprehensive Telemetry Comparison</h4>
+                  <p>Compare 50 SoFIE, BASS-II, FLEX, and ACME proxy runs across flame radius, radiative heat flux, and droplet d² curves.</p>
+                </div>
+              </div>
+
+              <div class="ignis-insights-row" data-jump-tab="resources" role="button" tabindex="0">
+                <span class="ignis-row-icon" aria-hidden="true">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>
+                </span>
+                <div>
+                  <h4>Live NASA Corpus &amp; Citation Audit</h4>
+                  <p>Auto-syncs live NASA fire-safety pages and 9 official NASA PDFs directly into the hybrid cosine + BM25 RAG index.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="ignis-metric-card" data-reveal="right">
+            <div class="ignis-metric-header">
+              <div class="ignis-metric-label">Citation-Verified Grounding &amp; Telemetry Readiness</div>
+              <div class="ignis-metric-kpi-row">
+                <span class="ignis-metric-big" id="showcase-grounding-kpi">98%</span>
+                <span class="ignis-metric-delta" id="showcase-runs-badge">+50 NASA Runs</span>
+              </div>
+            </div>
+
+            <div class="ignis-metric-bars" data-reveal="up">
+              <div class="ignis-bar-col">
+                <div class="ignis-bar-track">
+                  <div class="ignis-bar-fill is-ember" style="--bar-h: 88%;"></div>
+                </div>
+                <span class="ignis-bar-label">NASA<br/>Grounding</span>
+              </div>
+              <div class="ignis-bar-col">
+                <div class="ignis-bar-track">
+                  <div class="ignis-bar-fill" style="--bar-h: 66%;"></div>
+                </div>
+                <span class="ignis-bar-label">Shapley<br/>Coverage</span>
+              </div>
+              <div class="ignis-bar-col">
+                <div class="ignis-bar-track">
+                  <div class="ignis-bar-fill" style="--bar-h: 52%;"></div>
+                </div>
+                <span class="ignis-bar-label">Live Sync<br/>Depth</span>
+              </div>
+            </div>
+
+            <div class="ignis-metric-footer">
+              <span class="mono">227 KG Nodes · 342 Relations · 9 Official PDFs</span>
+              <button type="button" class="ignis-metric-link" data-jump-tab="ranking">Open Run Ranker →</button>
+            </div>
+          </div>
+        </section>
+
+        <!-- 4 Live Operational KPI Cards -->
+        <div class="grid-4 mb-3" id="dashboard-kpis" data-reveal-stagger="75"></div>
 
         <!-- Live AI Mission Brief (from /api/summary) -->
-        <div class="brief-banner" id="dashboard-mission-brief">
+        <div class="brief-banner" id="dashboard-mission-brief" data-reveal="up">
           <div class="text-muted">Loading mission intelligence from the NASA combustion corpus…</div>
         </div>
 
-        <!-- Interactive Feature Showcase Panels -->
-        <div class="feature-showcase-grid">
-          <!-- Panel 01: 3D Flame Twin -->
-          <div class="feature-card">
-            <div class="feature-card-body">
-              <div class="feature-kicker">PANEL 01 · SIMULATION</div>
-              <h3 class="feature-title">3D Microgravity Flame Digital Twin</h3>
-              <p class="feature-desc">
-                Real-time WebGL2 volumetric combustion chamber modeling 0g spherical diffusion shells, FLEX-2 cool flames, and uncapped custom gravity, oxygen, wind, and pressure regimes.
-              </p>
-              <button type="button" class="btn" style="width:fit-content;" data-jump-tab="twin">
-                Launch 3D Chamber →
-              </button>
-            </div>
-            <div class="feature-visual feature-visual-flame">
-              <div class="feature-preview-card">
-                <div class="feature-preview-head">
-                  <span>WebGL2 EMBER Chamber</span>
-                  <span class="badge badge-flame">60 FPS</span>
-                </div>
-                <div class="flex justify-between mb-3" style="font-size:11.5px;">
-                  <span class="text-sec">ISS 0g Shell</span>
-                  <span class="mono" style="font-weight:700;color:var(--accent-cyan);">1735 K · 0g</span>
-                </div>
-                <div class="flex justify-between mb-3" style="font-size:11.5px;">
-                  <span class="text-sec">Artemis 0.16g</span>
-                  <span class="mono" style="font-weight:700;color:var(--accent-flame);">34% O₂ · 56.5 kPa</span>
-                </div>
-                <div class="text-muted" style="font-size:11px;padding-top:8px;border-top:1px solid var(--border-subtle);">
-                  Click any readout number to test custom physics regimes without limits.
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Panel 02: Cabin Safety & Exact Shapley -->
-          <div class="feature-card">
-            <div class="feature-card-body">
-              <div class="feature-kicker">PANEL 02 · RISK ENGINE</div>
-              <h3 class="feature-title">Habitat Fire Risk &amp; Exact 2⁵ Shapley Lab</h3>
-              <p class="feature-desc">
-                Evaluate flammability shifts across ISS, Lunar (0.16g), and Martian (0.38g) atmospheres with exact cooperative Shapley attributions and an interactive (O₂, P) phase map.
-              </p>
-              <button type="button" class="btn" style="width:fit-content;" data-jump-tab="cabin">
-                Open Safety Lab →
-              </button>
-            </div>
-            <div class="feature-visual feature-visual-safety">
-              <div class="feature-preview-card">
-                <div class="feature-preview-head">
-                  <span>Lunar Habitat Assessment</span>
-                  <span class="badge risk-CRITICAL">HIGH RISK</span>
-                </div>
-                <div class="flex justify-between" style="font-size:11.5px;font-weight:600;">
-                  <span>PMMA in 34% O₂ (56.5 kPa)</span>
-                  <span class="mono text-flame">LOI 19.3%</span>
-                </div>
-                <div class="mini-progress-track">
-                  <div class="mini-progress-fill" style="width:84%;"></div>
-                </div>
-                <div class="text-sec" style="font-size:11px;">
-                  NASA-STD-6001B re-qualification required for enriched exploration atmospheres.
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Panel 03: Grounded Graph-RAG + PDFs -->
-          <div class="feature-card">
-            <div class="feature-card-body">
-              <div class="feature-kicker">PANEL 03 · GROUNDED AI</div>
-              <h3 class="feature-title">FlameAI Co-Pilot &amp; NASA PDF Library</h3>
-              <p class="feature-desc">
-                Hybrid cosine + BM25 retrieval fused with a 227-node NASA knowledge graph, sentence-level citation audit, automatic scientific plots, and direct links to 9 official NASA PDFs.
-              </p>
-              <button type="button" class="btn" style="width:fit-content;" data-jump-tab="chat">
-                Open FlameAI Chat →
-              </button>
-            </div>
-            <div class="feature-visual feature-visual-rag">
-              <div class="feature-preview-card">
-                <div class="feature-preview-head">
-                  <span>FlameAI Grounded Synthesis</span>
-                  <span class="badge badge-cyan">Audited</span>
-                </div>
-                <p class="text-sec" style="margin:0 0 10px;font-size:11.5px;line-height:1.55;">
-                  "In microgravity, eliminating buoyant convection produces spherical blue diffusion flames; shutting down ventilation fans is the primary containment directive."
-                </p>
-                <div class="flex justify-between items-center" style="font-size:10.5px;">
-                  <span class="mono text-cyan">[DOC-01 p.1] · [DOC-03 p.1]</span>
-                  <span style="font-weight:700;color:var(--accent-sage);">Websites + PDFs</span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Panel 04: 50-Run Telemetry & Knowledge Graph -->
-          <div class="feature-card">
-            <div class="feature-card-body">
-              <div class="feature-kicker">PANEL 04 · TELEMETRY &amp; GRAPH</div>
-              <h3 class="feature-title">50-Run Scenario Ranker &amp; Knowledge Graph</h3>
-              <p class="feature-desc">
-                Rank 50 NASA proxy combustion runs against your cabin setup with custom weights, overlay 40-point flame telemetry curves, and traverse multi-hop experiment relationships.
-              </p>
-              <div class="flex gap-2 flex-wrap">
-                <button type="button" class="btn btn-sm" data-jump-tab="ranking">50-Run Ranker</button>
-                <button type="button" class="btn btn-sm" data-jump-tab="graph">Knowledge Graph</button>
-              </div>
-            </div>
-            <div class="feature-visual feature-visual-data">
-              <div class="feature-preview-card">
-                <div class="feature-preview-head">
-                  <span>NASA PSI Telemetry &amp; KG</span>
-                  <span class="badge badge-violet">227 Nodes</span>
-                </div>
-                <div class="flex justify-between mb-3" style="font-size:11.5px;">
-                  <span class="text-sec">Proxy Combustion Runs</span>
-                  <span class="mono" style="font-weight:700;">50 Runs · 4 Metrics</span>
-                </div>
-                <div class="flex justify-between mb-3" style="font-size:11.5px;">
-                  <span class="text-sec">Semantic Graph Links</span>
-                  <span class="mono" style="font-weight:700;color:var(--accent-violet);">342 Relations</span>
-                </div>
-                <div class="text-muted" style="font-size:11px;padding-top:8px;border-top:1px solid var(--border-subtle);">
-                  Compare side-by-side flame radius, droplet d², heat flux &amp; temperature.
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
         <!-- Analytical Charts -->
-        <div class="grid-2 mb-3">
+        <div class="grid-2 mb-3" data-reveal-stagger="95">
           <div class="card">
             <div class="card-header">
               <div>
@@ -314,7 +398,7 @@
         </div>
 
         <!-- Empirical Findings Feed -->
-        <div class="card mt-4">
+        <div class="card mt-4" data-reveal="up">
           <div class="card-header">
             <div>
               <h3 class="card-title">Empirical Findings Feed</h3>
@@ -584,77 +668,228 @@
           </div>
         </div>
 
-        <!-- Sub-panel A: 50-Run Scenario Ranker -->
+        <!-- Sub-panel A: 50-Run Scenario Ranker & Interactive Telemetry Bento Theme -->
         <div id="rank-panel-runs">
-          <div class="card mb-3">
-            <div class="flex items-center justify-between flex-wrap gap-2 mb-3">
-              <div class="mono" style="font-size:12px;color:var(--accent-cyan);" id="rank-active-scenario-label"></div>
-              <div class="flex gap-2 flex-wrap">
-                <select class="select" id="run-program-filter" style="width:auto;"></select>
-                <select class="select" id="run-regime-filter" style="width:auto;"></select>
+          <div class="tb-bento-shell" id="tb-bento-shell">
+            <div class="tb-bento-header">
+              <div>
+                <p class="tb-kicker">NASA EMBER TELEMETRY CONSOLE</p>
+                <h2 class="tb-heading">Real-time combustion diagnostics &amp; 50-run mission ranker</h2>
+                <p class="tb-sub">Live telemetry streams, score breakdown gauges, radiative flux sparklines, and interactive NASA mission filters.</p>
               </div>
-            </div>
-            <div class="grid-3">
-              <div class="slider-row" style="margin-bottom:0;">
-                <div class="slider-label-row"><span>Similarity Weight</span><span class="slider-val" id="w-similarity-val">0.50</span></div>
-                <input type="range" id="w-similarity" min="0" max="1" step="0.05" value="0.5" />
-              </div>
-              <div class="slider-row" style="margin-bottom:0;">
-                <div class="slider-label-row"><span>Completeness Weight</span><span class="slider-val" id="w-completeness-val">0.20</span></div>
-                <input type="range" id="w-completeness" min="0" max="1" step="0.05" value="0.2" />
-              </div>
-              <div class="slider-row" style="margin-bottom:0;">
-                <div class="slider-label-row"><span>Safety Criticality Weight</span><span class="slider-val" id="w-criticality-val">0.30</span></div>
-                <input type="range" id="w-criticality" min="0" max="1" step="0.05" value="0.3" />
-              </div>
-            </div>
-          </div>
-
-          <div class="grid-asymmetric">
-            <div class="card">
-              <div class="card-header">
-                <h3 class="card-title">Top Ranked NASA Test Runs (Click row for telemetry)</h3>
-                <span class="mono text-muted" style="font-size:11px;">Blue=Sim · Violet=Comp · Coral=Crit</span>
-              </div>
-              <div class="data-table-wrap" style="max-height:520px;overflow-y:auto;">
-                <table class="data-table">
-                  <thead>
-                    <tr>
-                      <th>#</th>
-                      <th>Run ID</th>
-                      <th>Program</th>
-                      <th>Fuel</th>
-                      <th>O₂ / P</th>
-                      <th>Flow / g</th>
-                      <th>Regime</th>
-                      <th>Score</th>
-                    </tr>
-                  </thead>
-                  <tbody id="runs-rank-tbody"></tbody>
-                </table>
-              </div>
+              <div class="tb-scenario-chip mono" id="rank-active-scenario-label"></div>
             </div>
 
-            <div class="card">
-              <div class="card-header">
-                <div>
-                  <div class="card-kicker">TIME-SERIES TELEMETRY INSPECTOR</div>
-                  <h3 class="card-title">Measured Combustion Curves</h3>
+            <!-- 4-Card Interactive Hover-Spotlight Bento Grid -->
+            <div class="tb-bento-grid">
+              <!-- Card 1: Live Combustion Telemetry Curve (Large) -->
+              <div class="tb-glow-card tb-span-curve" data-tb-accent="flame" tabindex="0">
+                <div class="tb-card-edge" aria-hidden="true"></div>
+                <div class="tb-card-glow" aria-hidden="true"></div>
+                <div class="tb-card-face" aria-hidden="true">
+                  <div class="tb-card-spotlight"></div>
+                  <div class="tb-card-grid"></div>
+                </div>
+                <div class="tb-card-inner">
+                  <div class="tb-card-title-row">
+                    <h3 id="tb-curve-title">Selected Run Telemetry</h3>
+                    <span class="tb-live-badge"><span class="tb-pulse"></span>Live</span>
+                  </div>
+
+                  <div class="tb-metric-headline">
+                    <div class="tb-big-val-wrap">
+                      <span class="tb-big-val" id="tb-curve-latest">—</span>
+                      <span class="tb-big-unit" id="tb-curve-unit">mm</span>
+                    </div>
+                    <div class="tb-sub-stats">
+                      <span>avg <b id="tb-curve-avg">—</b></span>
+                      <span>peak <b id="tb-curve-peak">—</b></span>
+                    </div>
+                  </div>
+
+                  <div class="tb-chart-stage" id="tb-curve-stage">
+                    <svg viewBox="0 0 100 100" preserveAspectRatio="none" class="tb-chart-svg" id="tb-curve-svg" role="img" aria-label="Selected NASA run combustion telemetry curve">
+                      <defs>
+                        <linearGradient id="tb-lat-fill" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stop-color="#ff5e3a" stop-opacity="0.38" />
+                          <stop offset="100%" stop-color="#ff5e3a" stop-opacity="0" />
+                        </linearGradient>
+                      </defs>
+                      <line x1="0" x2="100" y1="25" y2="25" class="tb-grid-line" vector-effect="non-scaling-stroke" />
+                      <line x1="0" x2="100" y1="50" y2="50" class="tb-grid-line" vector-effect="non-scaling-stroke" />
+                      <line x1="0" x2="100" y1="75" y2="75" class="tb-grid-line" vector-effect="non-scaling-stroke" />
+                      <path id="tb-curve-area" d="" fill="url(#tb-lat-fill)" />
+                      <path id="tb-curve-compare-line" d="" fill="none" stroke="#38bdf8" stroke-width="1.8" stroke-dasharray="4 3" stroke-linecap="round" vector-effect="non-scaling-stroke" />
+                      <path id="tb-curve-line" d="" fill="none" stroke="#ff7452" stroke-width="2.5" stroke-linecap="round" vector-effect="non-scaling-stroke" />
+                      <line id="tb-curve-crosshair" x1="0" x2="0" y1="0" y2="100" stroke="rgba(255,140,105,0.5)" stroke-dasharray="3 3" vector-effect="non-scaling-stroke" style="display:none;" />
+                    </svg>
+                    <span class="tb-curve-dot" id="tb-curve-dot" aria-hidden="true" style="display:none;"></span>
+                    <div class="tb-curve-tooltip" id="tb-curve-tooltip" aria-hidden="true" style="display:none;"></div>
+                  </div>
+
+                  <div class="tb-axis-labels">
+                    <span id="tb-axis-start">t = 0.0s</span>
+                    <span id="tb-axis-end">burn end</span>
+                  </div>
+
+                  <ul class="tb-env-list" id="tb-env-list"></ul>
                 </div>
               </div>
-              <div id="telemetry-run-meta" class="mb-3"></div>
-              <div class="grid-2 mb-3">
-                <select class="select" id="telemetry-metric-select">
-                  <option value="flame_radius_mm">Flame Radius (mm)</option>
-                  <option value="d_squared_mm2">Droplet d² (mm²)</option>
-                  <option value="radiative_heat_flux_kw_m2">Radiative Heat Flux (kW/m²)</option>
-                  <option value="flame_temp_k">Flame Temperature (K)</option>
-                </select>
-                <select class="select" id="telemetry-compare-select">
-                  <option value="">Compare overlay: None</option>
-                </select>
+
+              <!-- Card 2: Run Score Breakdown Rings (Right Top) -->
+              <div class="tb-glow-card tb-span-half" data-tb-accent="emerald" tabindex="0">
+                <div class="tb-card-edge" aria-hidden="true"></div>
+                <div class="tb-card-glow" aria-hidden="true"></div>
+                <div class="tb-card-face" aria-hidden="true">
+                  <div class="tb-card-spotlight"></div>
+                  <div class="tb-card-grid"></div>
+                </div>
+                <div class="tb-card-inner">
+                  <div class="tb-card-title-row">
+                    <h3>Rank Score Audit</h3>
+                    <span class="mono" style="font-size:11px;color:#6ee7b7;">0–100 weighted</span>
+                  </div>
+                  <div class="tb-rings-row" id="tb-score-rings"></div>
+                </div>
               </div>
-              <div class="chart-box-tall"><canvas id="run-telemetry-chart"></canvas></div>
+
+              <!-- Card 3: Radiative Heat Flux Pulse Sparkline (Right Bottom) -->
+              <div class="tb-glow-card tb-span-half" data-tb-accent="cyan" tabindex="0">
+                <div class="tb-card-edge" aria-hidden="true"></div>
+                <div class="tb-card-glow" aria-hidden="true"></div>
+                <div class="tb-card-face" aria-hidden="true">
+                  <div class="tb-card-spotlight"></div>
+                  <div class="tb-card-grid"></div>
+                </div>
+                <div class="tb-card-inner">
+                  <div class="tb-card-title-row">
+                    <h3>Peak Heat Flux</h3>
+                    <span class="tb-live-badge"><span class="tb-pulse"></span>Live</span>
+                  </div>
+                  <div class="tb-big-val-wrap">
+                    <span class="tb-big-val tb-val-md" id="tb-flux-value">—</span>
+                    <span class="tb-big-unit">kW/m²</span>
+                  </div>
+                  <div class="tb-bars" id="tb-flux-bars" aria-hidden="true"></div>
+                </div>
+              </div>
+
+              <!-- Card 4: Interactive NASA Programs & Diagnostic Stack (Wide) -->
+              <div class="tb-glow-card tb-span-wide" data-tb-accent="amber" tabindex="0">
+                <div class="tb-card-edge" aria-hidden="true"></div>
+                <div class="tb-card-glow" aria-hidden="true"></div>
+                <div class="tb-card-face" aria-hidden="true">
+                  <div class="tb-card-spotlight"></div>
+                  <div class="tb-card-grid"></div>
+                </div>
+                <div class="tb-card-inner">
+                  <div class="tb-card-title-row">
+                    <h3>NASA Combustion Programs</h3>
+                    <span class="mono" style="font-size:11px;color:#94a3b8;">Click badge to filter 50 runs</span>
+                  </div>
+                  <ul class="tb-stack-grid" id="tb-program-stack"></ul>
+                  <p class="tb-stack-desc" id="tb-program-desc" aria-live="polite">
+                    Hover or focus any NASA mission badge to inspect its instrumentation, or click to filter runs below.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <!-- Weight Tuning & Filters GlowCard -->
+            <div class="tb-glow-card tb-controls-card" data-tb-accent="cyan">
+              <div class="tb-card-edge" aria-hidden="true"></div>
+              <div class="tb-card-glow" aria-hidden="true"></div>
+              <div class="tb-card-face" aria-hidden="true">
+                <div class="tb-card-spotlight"></div>
+                <div class="tb-card-grid"></div>
+              </div>
+              <div class="tb-card-inner">
+                <div class="flex items-center justify-between flex-wrap gap-2 mb-3">
+                  <div class="tb-card-title-row" style="margin:0;">
+                    <h3>Scenario Ranking Weights &amp; Filters</h3>
+                  </div>
+                  <div class="flex gap-2 flex-wrap">
+                    <select class="select tb-select" id="run-program-filter" style="width:auto;"></select>
+                    <select class="select tb-select" id="run-regime-filter" style="width:auto;"></select>
+                  </div>
+                </div>
+                <div class="grid-3">
+                  <div class="slider-row" style="margin-bottom:0;">
+                    <div class="slider-label-row"><span style="color:#cbd5e1;">Similarity Weight</span><span class="slider-val" id="w-similarity-val">0.50</span></div>
+                    <input type="range" id="w-similarity" min="0" max="1" step="0.05" value="0.5" />
+                  </div>
+                  <div class="slider-row" style="margin-bottom:0;">
+                    <div class="slider-label-row"><span style="color:#cbd5e1;">Completeness Weight</span><span class="slider-val" id="w-completeness-val">0.20</span></div>
+                    <input type="range" id="w-completeness" min="0" max="1" step="0.05" value="0.2" />
+                  </div>
+                  <div class="slider-row" style="margin-bottom:0;">
+                    <div class="slider-label-row"><span style="color:#cbd5e1;">Safety Criticality Weight</span><span class="slider-val" id="w-criticality-val">0.30</span></div>
+                    <input type="range" id="w-criticality" min="0" max="1" step="0.05" value="0.3" />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 50-Run Ranked Table + Full Chart.js Comparator GlowCards -->
+            <div class="tb-lower-grid">
+              <div class="tb-glow-card" data-tb-accent="flame">
+                <div class="tb-card-edge" aria-hidden="true"></div>
+                <div class="tb-card-glow" aria-hidden="true"></div>
+                <div class="tb-card-face" aria-hidden="true">
+                  <div class="tb-card-spotlight"></div>
+                  <div class="tb-card-grid"></div>
+                </div>
+                <div class="tb-card-inner">
+                  <div class="tb-card-title-row">
+                    <h3>Top Ranked NASA Test Runs (Click row to inspect telemetry)</h3>
+                    <span class="mono" style="font-size:11px;color:#94a3b8;">Cyan=Sim · Teal=Comp · Coral=Crit</span>
+                  </div>
+                  <div class="data-table-wrap tb-table-wrap" style="max-height:500px;overflow-y:auto;">
+                    <table class="data-table tb-table">
+                      <thead>
+                        <tr>
+                          <th>#</th>
+                          <th>Run ID</th>
+                          <th>Program</th>
+                          <th>Fuel</th>
+                          <th>O₂ / P</th>
+                          <th>Flow / g</th>
+                          <th>Regime</th>
+                          <th>Score</th>
+                        </tr>
+                      </thead>
+                      <tbody id="runs-rank-tbody"></tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+
+              <div class="tb-glow-card" data-tb-accent="emerald">
+                <div class="tb-card-edge" aria-hidden="true"></div>
+                <div class="tb-card-glow" aria-hidden="true"></div>
+                <div class="tb-card-face" aria-hidden="true">
+                  <div class="tb-card-spotlight"></div>
+                  <div class="tb-card-grid"></div>
+                </div>
+                <div class="tb-card-inner">
+                  <div class="tb-card-title-row">
+                    <h3>Time-Series Overlay Comparator</h3>
+                  </div>
+                  <div id="telemetry-run-meta" class="mb-3"></div>
+                  <div class="grid-2 mb-3">
+                    <select class="select tb-select" id="telemetry-metric-select">
+                      <option value="flame_radius_mm">Flame Radius (mm)</option>
+                      <option value="d_squared_mm2">Droplet d² (mm²)</option>
+                      <option value="radiative_heat_flux_kw_m2">Radiative Heat Flux (kW/m²)</option>
+                      <option value="flame_temp_k">Flame Temperature (K)</option>
+                    </select>
+                    <select class="select tb-select" id="telemetry-compare-select">
+                      <option value="">Compare overlay: None</option>
+                    </select>
+                  </div>
+                  <div class="chart-box-tall"><canvas id="run-telemetry-chart"></canvas></div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -740,10 +975,6 @@
         <div class="chat-layout">
           <div class="card chat-box" style="padding:0;overflow:hidden;">
             <div class="chat-messages" id="chat-messages"></div>
-            <div class="chat-input-bar">
-              <textarea class="chat-textarea" id="chat-input" rows="2" placeholder="Ask about BASS-II, SAFFIRE, FLEX-2 cool flames, Artemis 34% O₂, or request a chart/plot..."></textarea>
-              <button type="button" class="btn btn-primary" id="chat-send-btn" style="height:44px;padding:0 20px;">Send</button>
-            </div>
           </div>
 
           <div class="flex" style="flex-direction:column;gap:14px;">
@@ -764,38 +995,134 @@
         </div>
       </section>
 
-      <!-- ── VIEW 7: INTERACTIVE KNOWLEDGE GRAPH ─────────────────────────── -->
+      <!-- ── VIEW 7: INTERACTIVE KNOWLEDGE GRAPH (INFINITE BLUEPRINT WORKSPACE) ── -->
       <section class="view-panel" id="view-graph">
         <div class="view-header">
           <div>
             <h1 class="view-title">NASA Fire-Safety Knowledge Graph</h1>
-            <p class="view-subtitle">Drag nodes, scroll to zoom, pan canvas, and click any entity to inspect multi-hop NASA relationships.</p>
+            <p class="view-subtitle">Infinite blueprint workspace for NASA combustion experiments, polymers, safety directives, and peer-reviewed papers. Drag floating node cards, pan infinitely, zoom smoothly, and wire live connections.</p>
           </div>
-          <span class="badge badge-violet" id="kg-stats-badge">Loading graph...</span>
+          <span class="badge badge-cyan" id="kg-stats-badge">Loading graph...</span>
         </div>
 
-        <div class="card mb-3">
+        <div class="card mb-3" style="padding:12px 16px;">
           <div class="flex items-center justify-between flex-wrap gap-3">
             <div class="pill-group" id="kg-type-filters"></div>
-            <input type="text" class="input" id="kg-search-input" placeholder="Highlight node (e.g. BASS, PMMA, DOC-01)..." style="max-width:290px;" />
+            <div class="flex items-center gap-2 flex-wrap">
+              <button type="button" class="btn btn-sm" id="kg-load-preset-btn" title="Load a balanced starter graph of flagship NASA missions, materials, and papers">Starter Blueprint</button>
+              <button type="button" class="btn btn-sm" id="kg-clear-canvas-btn" title="Clear all placed widgets from the canvas">Clear Canvas</button>
+            </div>
           </div>
         </div>
 
-        <div class="kg-layout">
-          <div class="kg-canvas-wrap">
-            <canvas id="kg-canvas"></canvas>
-            <div class="kg-controls">
-              <button type="button" class="btn btn-sm" id="kg-zoom-in">+</button>
-              <button type="button" class="btn btn-sm" id="kg-zoom-out">−</button>
-              <button type="button" class="btn btn-sm" id="kg-reset">Reset</button>
+        <section class="wb-root" id="wb-root" aria-label="NASA Knowledge Graph Workspace" data-animated="true">
+          <header class="wb-header">
+            <span class="wb-mark" aria-hidden="true">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="3"/><circle cx="18" cy="6" r="3"/><circle cx="12" cy="18" r="3"/><line x1="8.6" y1="7.4" x2="15.4" y2="7.4"/><line x1="7.4" y1="8.6" x2="10.7" y2="15.4"/><line x1="16.6" y1="8.6" x2="13.3" y2="15.4"/></svg>
+            </span>
+            <div class="wb-heading">
+              <h2>NASA Combustion Blueprint Canvas</h2>
+              <span id="wb-subtitle-tag">Infinite workspace · Drag, pan &amp; zoom</span>
             </div>
+            <div class="wb-header-actions">
+              <button type="button" id="wb-add-custom-btn">+ Add step</button>
+              <button type="button" id="wb-auto-layout-btn">Auto-arrange</button>
+              <button type="button" id="wb-undo-btn" disabled>Undo</button>
+              <button type="button" class="wb-primary" id="wb-export-btn">Export JSON <span aria-hidden="true">↗</span></button>
+            </div>
+          </header>
+
+          <div class="wb-workspace">
+            <div class="wb-canvas-column">
+              <div class="wb-canvas" id="wb-canvas" tabindex="0" aria-label="Infinite NASA knowledge graph canvas. Drag background to pan, scroll to zoom, drag floating cards to arrange.">
+                <div class="wb-viewport" id="wb-viewport">
+                  <svg class="wb-edges-svg" id="wb-edges-svg" aria-hidden="true">
+                    <defs id="wb-svg-defs">
+                      <linearGradient id="wb-edge-grad" x1="0%" y1="0%" x2="100%" y2="0%">
+                        <stop offset="0%" stop-color="var(--accent-flame)" />
+                        <stop offset="100%" stop-color="var(--accent-cyan)" />
+                      </linearGradient>
+                    </defs>
+                    <g id="wb-edges-layer"></g>
+                    <path id="wb-draft-edge" class="wb-draft-edge" d="" />
+                  </svg>
+                  <div class="wb-nodes-layer" id="wb-nodes-layer"></div>
+                </div>
+
+                <p class="wb-empty" id="wb-empty-state" style="display:none;">Pick any NASA experiment, material, or paper from the Connection Stack to place it on the infinite workspace.</p>
+
+                <div class="wb-tools" role="group" aria-label="Canvas zoom and motion controls">
+                  <button type="button" id="kg-zoom-out" aria-label="Zoom out" title="Zoom out (−)">−</button>
+                  <button type="button" id="wb-zoom-readout" class="mono" title="Reset zoom to 100%">100%</button>
+                  <button type="button" id="kg-zoom-in" aria-label="Zoom in" title="Zoom in (+)">+</button>
+                  <button type="button" id="wb-fit-view" title="Fit all placed widgets into view">Fit all</button>
+                  <button type="button" id="kg-reset" title="Restore initial NASA blueprint">Reset</button>
+                  <button type="button" id="wb-motion-toggle" aria-pressed="false">Pause motion</button>
+                </div>
+              </div>
+
+              <div class="wb-status">
+                <span id="wb-status-counts"><i aria-hidden="true"></i> 0 widgets · 0 links</span>
+                <span id="wb-status-coords" class="mono">Pan (0, 0) · Scroll to zoom</span>
+              </div>
+
+              <div class="wb-editor">
+                <div class="wb-edit-row">
+                  <label for="wb-selected-select">Selected widget</label>
+                  <select id="wb-selected-select">
+                    <option value="">Unconnected new placement</option>
+                  </select>
+                  <button type="button" id="wb-expand-btn" disabled>Expand NASA links</button>
+                  <button type="button" id="wb-edit-btn" disabled>Edit widget</button>
+                  <button type="button" id="wb-remove-btn" disabled>Remove</button>
+                </div>
+
+                <form class="wb-step-form" id="wb-step-form" style="display:none;">
+                  <label>Widget title<input id="wb-edit-label" required maxlength="80" /></label>
+                  <label>Scientific detail / notes<textarea id="wb-edit-detail" maxlength="240" rows="2"></textarea></label>
+                  <label>Metadata badge (optional)<input id="wb-edit-tool" maxlength="48" /></label>
+                  <div>
+                    <button type="submit" class="wb-primary">Save widget</button>
+                    <button type="button" id="wb-edit-cancel">Cancel</button>
+                  </div>
+                </form>
+
+                <form class="wb-connect" id="wb-connect-form">
+                  <label>From<select id="wb-connect-source"><option value="">Choose source</option></select></label>
+                  <span aria-hidden="true">→</span>
+                  <label>To<select id="wb-connect-target"><option value="">Choose destination</option></select></label>
+                  <button type="submit" id="wb-connect-submit" disabled>Connect nodes</button>
+                </form>
+
+                <details class="wb-details" id="wb-connections-details">
+                  <summary id="wb-connections-summary">Connections (0) and keyboard shortcuts</summary>
+                  <p>Drag empty canvas space to pan infinitely, scroll or pinch to zoom around your cursor, drag floating widgets to position them on the 10px grid, or drag from a right output port to a left input port to create a Bezier link. With a widget focused, use Arrow keys to move it or press Delete to remove it.</p>
+                  <ul id="wb-connections-list"></ul>
+                </details>
+
+                <p class="wb-message" id="wb-message" role="status" aria-live="polite">Drag any floating NASA widget, zoom with your scroll wheel, or drop entities from the Connection Stack.</p>
+              </div>
+            </div>
+
+            <aside class="wb-stack" aria-label="NASA Connection Stack and Node Inspector">
+              <div class="wb-stack-heading">
+                <h3>NASA Connection Stack</h3>
+                <span class="mono" id="wb-stack-total" style="font-size:11px;color:var(--text-muted);">0</span>
+              </div>
+              <p>Click any NASA entity to place its floating widget onto the infinite workspace (or focus it if already placed).</p>
+
+              <input type="text" class="input mb-3" id="kg-search-input" placeholder="Search 227 NASA nodes (BASS, PMMA, DOC-01)..." style="font-size:12px;padding:8px 11px;" />
+
+              <div class="wb-stack-groups" id="wb-stack-groups"></div>
+
+              <div class="wb-inspector-card" id="kg-inspector">
+                <div class="card-kicker">SELECTED NODE INSPECTOR</div>
+                <h4 style="font-family:var(--font-display);font-size:14.5px;margin:4px 0 6px;">Select a floating widget</h4>
+                <p class="text-sec" style="font-size:12px;margin:0;">Click any floating card on the canvas to inspect its full NASA relationships, expand connected neighbors, open its source paper, or ask FlameAI.</p>
+              </div>
+            </aside>
           </div>
-          <div class="card" id="kg-inspector" style="max-height:580px;overflow-y:auto;">
-            <div class="card-kicker">NODE INSPECTOR</div>
-            <h3 style="font-family:var(--font-display);margin:4px 0 8px;">Select a Node</h3>
-            <p class="text-sec" style="font-size:13px;">Click any node on the canvas to highlight its connected NASA experiments, materials, safety directives, and peer-reviewed papers.</p>
-          </div>
-        </div>
+        </section>
       </section>
 
       <!-- ── VIEW 8: NASA RESEARCH LIBRARY & LIVE WEB SYNC ──────────────── -->
@@ -868,7 +1195,220 @@
         <div class="grid-3" id="resources-grid"></div>
       </section>
 
+      <!-- ── VIEW 9: SETTINGS, READY-MADE THEMES, FONTS & API KEYS ────────── -->
+      <section class="view-panel" id="view-settings">
+        <div class="view-header">
+          <div>
+            <h1 class="view-title">Settings &amp; Personalization</h1>
+            <p class="view-subtitle">
+              Customize ready-made visual themes, typography pairings, interface motion, and persistent AI API keys saved automatically for your next login.
+            </p>
+          </div>
+          <div class="flex items-center gap-2 flex-wrap">
+            <button type="button" class="btn btn-sm" id="btn-replay-intro">Replay Intro Logo</button>
+            <button type="button" class="btn btn-sm" id="settings-reset-btn">Reset to Defaults</button>
+          </div>
+        </div>
+
+        <div class="settings-toast" id="settings-toast" role="status" aria-live="polite"></div>
+
+        <!-- 1. Ready-Made Main Themes -->
+        <div class="card mb-3">
+          <div class="card-header">
+            <div>
+              <div class="card-kicker">APPEARANCE</div>
+              <h3 class="card-title">Ready-Made Main Themes</h3>
+              <div class="text-muted" style="font-size:12.5px;">Click any theme preset to apply instantly across the dashboard, charts, horizon arc, and floating bar.</div>
+            </div>
+            <span class="badge badge-flame">Auto-Saved</span>
+          </div>
+          <div class="settings-theme-grid" id="settings-theme-grid"></div>
+        </div>
+
+        <!-- 2. Ready-Made Font Themes -->
+        <div class="card mb-3">
+          <div class="card-header">
+            <div>
+              <div class="card-kicker">TYPOGRAPHY</div>
+              <h3 class="card-title">Ready-Made Font Themes</h3>
+              <div class="text-muted" style="font-size:12.5px;">Switch display headings, interface copy, and telemetry typefaces with live preview.</div>
+            </div>
+          </div>
+          <div class="settings-font-grid" id="settings-font-grid"></div>
+        </div>
+
+        <!-- 3. Layout, Motion & Voice Preferences + 4. Persistent API Keys -->
+        <div class="settings-bottom-grid">
+          <!-- Interface & Motion Controls -->
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <div class="card-kicker">EXPERIENCE</div>
+                <h3 class="card-title">Display, Motion &amp; Voice</h3>
+                <div class="text-muted" style="font-size:12px;">Fine-tune spacing, corner geometry, animations, and voice language.</div>
+              </div>
+            </div>
+
+            <div class="settings-control-group">
+              <label class="settings-control-label">Text Size Scale</label>
+              <div class="pill-group">
+                <button type="button" class="pill-btn" data-pref-scale="compact">Compact</button>
+                <button type="button" class="pill-btn active" data-pref-scale="default">Default</button>
+                <button type="button" class="pill-btn" data-pref-scale="comfortable">Comfortable</button>
+              </div>
+            </div>
+
+            <div class="settings-control-group">
+              <label class="settings-control-label">Card Corner Style</label>
+              <div class="pill-group">
+                <button type="button" class="pill-btn" data-pref-radius="sharp">Sharp Technical</button>
+                <button type="button" class="pill-btn active" data-pref-radius="balanced">Balanced</button>
+                <button type="button" class="pill-btn" data-pref-radius="soft">Soft Pill</button>
+              </div>
+            </div>
+
+            <div class="settings-control-group">
+              <label class="settings-control-label" for="pref-voice-lang">Voice Dictation Language</label>
+              <select class="select" id="pref-voice-lang">
+                <option value="auto">Auto-Detect (Browser Default)</option>
+                <option value="en-US">English (US)</option>
+                <option value="en-GB">English (UK)</option>
+                <option value="en-IN">English (India)</option>
+                <option value="es-ES">Spanish (ES)</option>
+                <option value="fr-FR">French (FR)</option>
+                <option value="de-DE">German (DE)</option>
+                <option value="ja-JP">Japanese (JP)</option>
+              </select>
+            </div>
+
+            <div class="settings-toggle-list">
+              <label class="settings-toggle-row">
+                <div>
+                  <strong>Glass Logo Entrance Animation</strong>
+                  <span>Play the WebGL2 liquid-glass Ignis reveal when opening the site.</span>
+                </div>
+                <input type="checkbox" class="settings-switch" id="pref-show-intro" checked />
+              </label>
+
+              <label class="settings-toggle-row">
+                <div>
+                  <strong>Scroll Reveal Choreography</strong>
+                  <span>Smooth staggered glide-in animations as you scroll down pages.</span>
+                </div>
+                <input type="checkbox" class="settings-switch" id="pref-scroll-anim" checked />
+              </label>
+
+              <label class="settings-toggle-row">
+                <div>
+                  <strong>Ambient Horizon &amp; Glow Rays</strong>
+                  <span>Subtle volumetric light beams and cursor-tracking glow.</span>
+                </div>
+                <input type="checkbox" class="settings-switch" id="pref-ambient-glow" checked />
+              </label>
+            </div>
+          </div>
+
+          <!-- Persistent API Keys Panel -->
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <div class="card-kicker">AI ENGINE &amp; VOICE</div>
+                <h3 class="card-title">API Keys &amp; Provider Routing</h3>
+                <div class="text-muted" style="font-size:12px;">Saved locally and on the server so your keys stay ready on your next login.</div>
+              </div>
+              <span class="badge badge-cyan" id="settings-active-engine">Offline NASA Grounded Engine</span>
+            </div>
+
+            <form id="settings-api-form" autocomplete="off">
+              <div class="settings-control-group">
+                <label class="settings-control-label" for="settings-preferred-provider">Preferred Active AI Provider</label>
+                <select class="select" id="settings-preferred-provider">
+                  <option value="auto">Auto Priority (First Configured Key)</option>
+                  <option value="openai">OpenAI</option>
+                  <option value="gemini">Google Gemini</option>
+                  <option value="groq">Groq</option>
+                  <option value="openrouter">OpenRouter</option>
+                  <option value="offline_grounded">Offline NASA Grounded Engine Only</option>
+                </select>
+              </div>
+
+              <div class="settings-provider-list" id="settings-api-providers"></div>
+
+              <label class="settings-toggle-row" style="margin-top:14px;">
+                <div>
+                  <strong>Remember API keys in this browser</strong>
+                  <span>Restores your keys automatically on next login even after server restarts.</span>
+                </div>
+                <input type="checkbox" class="settings-switch" id="pref-remember-keys" checked />
+              </label>
+
+              <div class="flex items-center justify-between flex-wrap gap-2 mt-4">
+                <span class="text-muted" style="font-size:11.5px;">Keys are masked in responses and excluded from Git via <code>.gitignore</code>.</span>
+                <button type="submit" class="btn btn-primary" id="settings-save-keys-btn">Save API Keys &amp; Preferences</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </section>
+
     </main>
+  </div>
+
+  <!-- ── Hovering Lower-Screen Morphing Chat Bar + Voice Mic Widget ──────── -->
+  <div class="mi-dock-wrap" id="morphing-chat-dock" role="region" aria-label="Ignis floating chat bar">
+    <div class="mi-status-pill" id="mi-status-pill" role="status" aria-live="polite"></div>
+    <form class="mi-pill" id="mi-form" autocomplete="off">
+      <button type="button" class="mi-mode-btn" id="mi-mode-btn" title="Switch mode" aria-label="Switch input mode">
+        <span class="mi-mode-icon-slot" id="mi-mode-icon-slot"></span>
+        <svg class="mi-unfold-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="m7 15 5 5 5-5"/><path d="m7 9 5-5 5 5"/>
+        </svg>
+      </button>
+
+      <div class="mi-field-wrap">
+        <div class="mi-placeholder-stage" id="mi-placeholder-stage" aria-hidden="true"></div>
+        <input type="text" class="mi-input" id="mi-input" aria-label="Ask Ignis FlameAI or speak with the microphone" />
+      </div>
+
+      <div class="mi-actions">
+        <!-- Compact ChatGPT-Style Voice Recorder (expands neatly beside Send — never takes over the whole bar) -->
+        <div class="mi-recorder-wrap" id="mi-recorder-wrap">
+          <button type="button" class="mi-mic-btn" id="mi-mic-btn" aria-pressed="false" aria-label="Start voice dictation" title="Voice dictation (Alt+M)">
+            <svg class="mi-mic-svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <rect x="9" y="2" width="6" height="12" rx="3"/>
+              <path d="M5 10v2a7 7 0 0 0 14 0v-2"/>
+              <line x1="12" y1="19" x2="12" y2="22"/>
+            </svg>
+          </button>
+
+          <div class="mi-rec-pill" id="mi-rec-pill" role="group" aria-label="Voice recording controls">
+            <button type="button" class="mi-rec-icon-btn" id="mi-rec-discard" aria-label="Discard voice recording" title="Discard (Esc)">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <polyline points="3 6 5 6 21 6"/>
+                <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+                <path d="M10 11v6M14 11v6"/>
+              </svg>
+            </button>
+            <span class="mi-rec-dot" aria-hidden="true"></span>
+            <span class="mi-rec-timer" id="mi-rec-timer" role="timer">0:00</span>
+            <canvas class="mi-rec-canvas" id="mi-rec-canvas" aria-hidden="true"></canvas>
+            <button type="button" class="mi-rec-stop-btn" id="mi-rec-stop" aria-label="Stop and insert transcript into chat box" title="Stop & write into chat box">
+              <svg class="mi-rec-check-svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <polyline points="20 6 9 17 4 12"/>
+              </svg>
+              <span class="mi-rec-spinner" aria-hidden="true"></span>
+            </button>
+          </div>
+        </div>
+
+        <button type="submit" class="mi-send-btn" id="mi-send-btn" aria-label="Send message" title="Send (Enter)">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <line x1="5" y1="12" x2="19" y2="12"/>
+            <polyline points="12 5 19 12 12 19"/>
+          </svg>
+        </button>
+      </div>
+    </form>
   </div>
 
   <!-- ── Global Document Reader & Entity Detail Modal ──────────────────────── -->
@@ -885,6 +1425,6 @@
     </div>
   </div>
 
-  <script type="module" src="/js/app.js?v=11"></script>
+  <script type="module" src="/js/app.js?v=20"></script>
 </body>
 </html>

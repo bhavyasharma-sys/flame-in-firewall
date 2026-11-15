@@ -263,8 +263,6 @@ export async function initResources() {
       if (addBtn) addBtn.disabled = false;
     }
   });
-
-  on('doc:open', ({ docId, page }) => openDocumentReader(docId, page || 1));
 }
 
 function renderResources() {

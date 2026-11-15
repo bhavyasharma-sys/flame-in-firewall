@@ -27,6 +27,9 @@ except ImportError:
                     os.environ.setdefault(k.strip(), v.strip())
 
 # ── API Keys & Models ─────────────────────────────────────────────────────────
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "").strip()
+OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini").strip()
+
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "").strip()
 OPENROUTER_MODEL = os.getenv("OPENROUTER_MODEL", "google/gemini-2.5-flash").strip()
 
@@ -49,6 +52,7 @@ EMBER_ISS_DIR = os.path.join(EMBER_DATA_DIR, "iss_pages")
 CHROMA_DB_DIR = os.path.join(DATA_DIR, "chromadb")
 MEMORY_FILE = os.path.join(DATA_DIR, "conversation_memory.json")
 LIVE_NASA_CACHE_FILE = os.path.join(DATA_DIR, "live_nasa_cache.json")
+USER_SETTINGS_FILE = os.path.join(DATA_DIR, "user_settings.json")
 FRONTEND_DIR = os.path.join(BASE_DIR, "frontend")
 
 # ── Live NASA Website Sync -> RAG Auto-Refresh ────────────────────────────────
@@ -81,11 +85,11 @@ CORS_ORIGINS = [
 ]
 
 # ── App Identity ──────────────────────────────────────────────────────────────
-APP_TITLE = "Flame in Freefall — NASA Fire Safety Intelligence"
+APP_TITLE = "Ignis — NASA Fire Safety Intelligence"
 APP_VERSION = "3.0.0"
 
 # ── System Prompt ─────────────────────────────────────────────────────────────
-SYSTEM_PROMPT = """You are FlameAI, an expert Super-Intelligence (SI) assistant specialized in microgravity combustion science and spacecraft fire safety for the "Flame in Freefall" platform (NASA Space Apps Challenge 2026, Team Eagle20).
+SYSTEM_PROMPT = """You are FlameAI, an expert Super-Intelligence (SI) assistant specialized in microgravity combustion science and spacecraft fire safety for the "Ignis" platform (NASA Space Apps Challenge 2026, Team Eagle20).
 
 Your core knowledge is strictly grounded in NASA's microgravity combustion research:
 - BASS / BASS-II (Burning and Suppression of Solids — ventilation paradox, opposed/concurrent flow spread)

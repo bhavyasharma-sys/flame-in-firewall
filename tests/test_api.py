@@ -645,6 +645,157 @@ class FlameInFreefallAPITests(unittest.TestCase):
             httpd.shutdown()
             httpd.server_close()
 
+    def test_user_settings_themes_and_persistent_api_keys(self) -> None:
+        import os
+        import tempfile
+        from unittest.mock import patch
+
+        prev_prefs = dict(server.engine.user_preferences)
+        prev_keys = dict(server.engine._saved_api_keys)
+        prev_pref_prov = server.engine.llm.preferred_provider
+        prev_models = {
+            "openai": server.engine.llm.openai_model,
+            "gemini": server.engine.llm.gemini_model,
+            "groq": server.engine.llm.groq_model,
+            "openrouter": server.engine.llm.openrouter_model,
+        }
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_settings = os.path.join(tmpdir, "user_settings.json")
+            with patch.object(server, "USER_SETTINGS_FILE", tmp_settings):
+                try:
+                    # 1. Save theme/font preferences + OpenAI key and confirm key is masked, never echoed raw
+                    r = self.client.post(
+                        "/api/settings",
+                        json={
+                            "preferences": {"palette": "orbital-gold", "font": "space-grotesk", "scale": "comfortable"},
+                            "preferred_provider": "openai",
+                            "api_keys": {"openai": "sk-test-1234567890abcdef"},
+                            "models": {"openai": "gpt-4o-mini"},
+                        },
+                    )
+                    self.assertEqual(r.status_code, 200)
+                    body = r.json()
+                    self.assertEqual(body["preferences"]["palette"], "orbital-gold")
+                    self.assertEqual(body["preferences"]["font"], "space-grotesk")
+                    self.assertEqual(body["ai"]["active_provider"], "openai")
+                    self.assertTrue(body["ai"]["providers"]["openai"]["configured"])
+                    self.assertEqual(body["ai"]["providers"]["openai"]["masked_key"], "sk-t••••cdef")
+                    self.assertNotIn("1234567890ab", r.text)
+
+                    # 2. GET /api/settings returns persisted state & masked preview
+                    g = self.client.get("/api/settings")
+                    self.assertEqual(g.status_code, 200)
+                    gb = g.json()
+                    self.assertEqual(gb["preferences"]["palette"], "orbital-gold")
+                    self.assertEqual(gb["ai"]["active_provider"], "openai")
+                    self.assertNotIn("1234567890ab", g.text)
+
+                    # 3. Reset cleanly clears stored keys & preferences
+                    rs = self.client.post("/api/settings/reset")
+                    self.assertEqual(rs.status_code, 200)
+                    rb = rs.json()
+                    self.assertEqual(rb["preferences"], {})
+                    self.assertEqual(rb["ai"]["active_provider"], "offline_grounded")
+                    self.assertFalse(rb["ai"]["providers"]["openai"]["configured"])
+                finally:
+                    server.engine.user_preferences = prev_prefs
+                    server.engine._saved_api_keys = prev_keys
+                    server.engine.llm.update_credentials(
+                        preferred_provider=prev_pref_prov,
+                        openai_key=prev_keys.get("openai", ""),
+                        gemini_key=prev_keys.get("gemini", ""),
+                        groq_key=prev_keys.get("groq", ""),
+                        openrouter_key=prev_keys.get("openrouter", ""),
+                        openai_model=prev_models["openai"],
+                        gemini_model=prev_models["gemini"],
+                        groq_model=prev_models["groq"],
+                        openrouter_model=prev_models["openrouter"],
+                    )
+
+    def test_extract_models_from_provider_api_key(self) -> None:
+        import os
+        import tempfile
+        from unittest.mock import AsyncMock, patch
+
+        prev_prefs = dict(server.engine.user_preferences)
+        prev_keys = dict(server.engine._saved_api_keys)
+        prev_pref_prov = server.engine.llm.preferred_provider
+        prev_models = {
+            "openai": server.engine.llm.openai_model,
+            "gemini": server.engine.llm.gemini_model,
+            "groq": server.engine.llm.groq_model,
+            "openrouter": server.engine.llm.openrouter_model,
+        }
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_settings = os.path.join(tmpdir, "user_settings.json")
+            with patch.object(server, "USER_SETTINGS_FILE", tmp_settings):
+                try:
+                    self.client.post("/api/settings/reset")
+
+                    # 1. Unsupported provider -> 422; missing API key -> 400
+                    bad = self.client.post("/api/settings/models", json={"provider": "unknown_llm", "api_key": "abc"})
+                    self.assertEqual(bad.status_code, 422)
+                    missing = self.client.post("/api/settings/models", json={"provider": "openai"})
+                    self.assertEqual(missing.status_code, 400)
+
+                    # 2. Mock provider model discovery for OpenAI, Gemini, Groq, and OpenRouter
+                    sample_catalog = {
+                        "openai": [
+                            {"id": "gpt-4o", "label": "gpt-4o", "owned_by": "openai", "category": "chat"},
+                            {"id": "gpt-4o-mini", "label": "gpt-4o-mini", "owned_by": "openai", "category": "chat"},
+                        ],
+                        "gemini": [
+                            {"id": "gemini-2.5-flash", "label": "Gemini 2.5 Flash (gemini-2.5-flash)", "owned_by": "google", "context_length": 1048576, "category": "chat"},
+                        ],
+                        "groq": [
+                            {"id": "llama-3.3-70b-versatile", "label": "llama-3.3-70b-versatile", "owned_by": "groq", "context_length": 131072, "category": "chat"},
+                        ],
+                        "openrouter": [
+                            {"id": "anthropic/claude-3.7-sonnet", "label": "Claude 3.7 Sonnet — anthropic/claude-3.7-sonnet", "owned_by": "anthropic", "context_length": 200000, "category": "chat"},
+                        ],
+                    }
+
+                    async def fake_fetch(provider: str, api_key: str):
+                        self.assertTrue(len(api_key) > 4)
+                        return sample_catalog[provider]
+
+                    with patch.object(server, "_fetch_provider_models_http", new=AsyncMock(side_effect=fake_fetch)):
+                        for prov in ("openai", "gemini", "groq", "openrouter"):
+                            r = self.client.post(
+                                "/api/settings/models",
+                                json={"provider": prov, "api_key": f"test-key-{prov}-9999"},
+                            )
+                            self.assertEqual(r.status_code, 200)
+                            body = r.json()
+                            self.assertEqual(body["provider"], prov)
+                            self.assertEqual(body["count"], len(sample_catalog[prov]))
+                            self.assertEqual(body["models"][0]["id"], sample_catalog[prov][0]["id"])
+                            self.assertNotIn("9999", r.text)
+
+                        # Also verify discovery falls back to the backend's saved key when api_key is omitted
+                        self.client.post(
+                            "/api/settings",
+                            json={"api_keys": {"gemini": "AIzaSyTestSavedKey12345"}},
+                        )
+                        r2 = self.client.post("/api/settings/models", json={"provider": "gemini"})
+                        self.assertEqual(r2.status_code, 200)
+                        self.assertEqual(r2.json()["models"][0]["id"], "gemini-2.5-flash")
+                finally:
+                    server.engine.user_preferences = prev_prefs
+                    server.engine._saved_api_keys = prev_keys
+                    server.engine.llm.update_credentials(
+                        preferred_provider=prev_pref_prov,
+                        openai_key=prev_keys.get("openai", ""),
+                        gemini_key=prev_keys.get("gemini", ""),
+                        groq_key=prev_keys.get("groq", ""),
+                        openrouter_key=prev_keys.get("openrouter", ""),
+                        openai_model=prev_models["openai"],
+                        gemini_model=prev_models["gemini"],
+                        groq_model=prev_models["groq"],
+                        openrouter_model=prev_models["openrouter"],
+                    )
+
 
 if __name__ == "__main__":
     unittest.main()
