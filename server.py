@@ -1120,7 +1120,7 @@ def chat_stream(
 class ChatSuggestionsRequest(BaseModel):
     messages: list[dict[str, str]] = Field(default_factory=list)
     notebook_title: str = ""
-    scenario: Optional[CabinParams] = None
+    scenario: Optional[CabinConfigIn] = None
 
 
 @app.post("/api/chat/suggestions")

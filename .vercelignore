@@ -1,0 +1,17 @@
+.git/
+.venv/
+venv/
+.vercel/
+.cache/
+node_modules/
+tests/
+src/
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+.env*
+data/chromadb/
+data/conversation_memory.json
+data/live_nasa_cache.json
+data/user_settings.json
+*.log

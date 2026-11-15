@@ -170,9 +170,12 @@ export const api = {
     }
   },
   chatSuggestions: ({ messages = [], notebookTitle = '', scenario = null, sessionId = null } = {}) =>
-    request('/api/chat/suggestions', {
+    jsonFetch('/api/chat/suggestions', {
       method: 'POST',
-      headers: sessionHeaders(sessionId),
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Session-Id': sessionId || getSessionId(),
+      },
       body: JSON.stringify({
         messages,
         notebook_title: notebookTitle,

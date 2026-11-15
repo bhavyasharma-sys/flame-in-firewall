@@ -1,4 +1,6 @@
 .venv/
+.vercel/
+.cache/
 __pycache__/
 *.py[cod]
 *.pyo
