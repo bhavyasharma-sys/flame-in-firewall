@@ -1117,6 +1117,27 @@ def chat_stream(
     )
 
 
+class ChatSuggestionsRequest(BaseModel):
+    messages: list[dict[str, str]] = Field(default_factory=list)
+    notebook_title: str = ""
+    scenario: Optional[CabinParams] = None
+
+
+@app.post("/api/chat/suggestions")
+def chat_suggestions(req: ChatSuggestionsRequest) -> dict[str, Any]:
+    if not engine.llm.is_configured:
+        return {"available": False, "queries": []}
+    scenario_dict = req.scenario.model_dump() if req.scenario else None
+    queries = engine.llm.generate_quick_queries(
+        messages=req.messages,
+        notebook_title=req.notebook_title,
+        scenario=scenario_dict,
+    )
+    if not queries:
+        return {"available": False, "queries": []}
+    return {"available": True, "queries": queries}
+
+
 @app.delete("/api/chat/memory")
 def clear_memory(
     x_session_id: Optional[str] = Header(default=None, alias="X-Session-Id"),

@@ -306,6 +306,116 @@ class LLMClient:
             sources=sources or [],
         )
 
+    def generate_quick_queries(
+        self,
+        messages: list[dict[str, str]],
+        notebook_title: str = "",
+        scenario: Optional[dict[str, Any]] = None,
+        max_items: int = 4,
+    ) -> list[dict[str, str]]:
+        """Generate AI follow-up quick queries resembling the active conversation.
+
+        Returns [] immediately if no live AI provider is configured or reachable.
+        """
+        if not self.is_configured:
+            return []
+
+        recent = [
+            f"{m.get('role', 'user').upper()}: {str(m.get('content', ''))[:400]}"
+            for m in (messages or [])[-6:]
+            if str(m.get("content", "")).strip()
+        ]
+        ctx_parts: list[str] = []
+        if notebook_title.strip():
+            ctx_parts.append(f"Notebook topic: {notebook_title.strip()}")
+        if isinstance(scenario, dict) and scenario:
+            ctx_parts.append(
+                f"Active spacecraft cabin: {scenario.get('oxygen_pct')}% O2, "
+                f"{scenario.get('pressure_kpa')} kPa, {scenario.get('flow_velocity_cm_s')} cm/s, "
+                f"{scenario.get('gravity_g')}g, fuel={scenario.get('fuel_material')}"
+            )
+        if recent:
+            ctx_parts.append("Recent conversation:\n" + "\n".join(recent))
+        else:
+            ctx_parts.append("Conversation just started (no messages yet).")
+
+        prompt = (
+            "You are FlameAI, a NASA microgravity spacecraft fire-safety assistant.\n"
+            "Generate 3 or 4 concise, high-value follow-up user queries that naturally continue or resemble "
+            "this specific conversation/context.\n"
+            "Return ONLY a valid JSON array of objects with keys `label` (max 42 chars) and `prompt` "
+            "(complete question string). No markdown fences, no commentary.\n\n"
+            + "\n\n".join(ctx_parts)
+        )
+
+        raw = ""
+        for provider in self._provider_order():
+            if not self._has_provider_key(provider):
+                continue
+            try:
+                if provider == "openai":
+                    raw = self._call_openai_compat(
+                        "https://api.openai.com/v1/chat/completions",
+                        self.openai_key,
+                        self.openai_model,
+                        prompt,
+                    )
+                elif provider == "openrouter":
+                    raw = self._call_openai_compat(
+                        "https://openrouter.ai/api/v1/chat/completions",
+                        self.openrouter_key,
+                        self.openrouter_model,
+                        prompt,
+                        extra_headers={"HTTP-Referer": "http://localhost:8000", "X-Title": "Ignis"},
+                    )
+                elif provider == "gemini":
+                    raw = self._call_gemini_rest(prompt)
+                elif provider == "groq":
+                    raw = self._call_openai_compat(
+                        "https://api.groq.com/openai/v1/chat/completions",
+                        self.groq_key,
+                        self.groq_model,
+                        prompt,
+                    )
+                if raw and raw.strip():
+                    break
+            except Exception as exc:
+                logger.warning("Quick-query AI generation failed on %s: %s", provider, exc)
+                raw = ""
+
+        if not raw or not raw.strip():
+            return []
+
+        cleaned = raw.strip()
+        match = re.search(r"\[[\s\S]*\]", cleaned)
+        if not match:
+            return []
+        try:
+            parsed = json.loads(match.group(0))
+        except Exception:
+            return []
+        if not isinstance(parsed, list):
+            return []
+
+        out: list[dict[str, str]] = []
+        seen: set[str] = set()
+        for item in parsed:
+            if isinstance(item, str):
+                prompt_text = item.strip()
+                label = prompt_text[:40].rstrip() + ("…" if len(prompt_text) > 40 else "")
+            elif isinstance(item, dict):
+                prompt_text = str(item.get("prompt") or item.get("query") or item.get("label") or "").strip()
+                label = str(item.get("label") or prompt_text[:40]).strip()
+            else:
+                continue
+            if not prompt_text or prompt_text.lower() in seen:
+                continue
+            seen.add(prompt_text.lower())
+            out.append({"label": label[:46], "prompt": prompt_text})
+            if len(out) >= max_items:
+                break
+        return out
+
     def _build_prompt(self, question: str, context: str, is_out_of_scope: bool) -> str:
         parts = [SYSTEM_PROMPT, "\n\n---\n"]
         if not is_out_of_scope and context.strip():

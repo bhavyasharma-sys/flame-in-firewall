@@ -16,25 +16,31 @@ import {
   updateEngineStatusBadge,
 } from './preferences.js';
 import { initScrollReveal, refreshScrollReveals } from './scroll-reveal.js';
+import { initSidebar } from './sidebar.js';
 import { emit, esc, on, riskColor, setActiveCabin, setTheme, state } from './state.js';
 
-let chartJsPromise = null;
 function ensureChartJs() {
   if (typeof window.Chart !== 'undefined') return Promise.resolve(window.Chart);
-  if (!chartJsPromise) {
-    chartJsPromise = new Promise((resolve, reject) => {
+  if (!window.__ignisChartJsPromise) {
+    window.__ignisChartJsPromise = new Promise((resolve, reject) => {
+      const existing = document.querySelector('script[src*="/js/vendor/chart.umd.min.js"]');
+      if (existing) {
+        existing.addEventListener('load', () => resolve(window.Chart));
+        existing.addEventListener('error', () => reject(new Error('Failed to load Chart.js')));
+        return;
+      }
       const s = document.createElement('script');
       s.src = '/js/vendor/chart.umd.min.js';
       s.async = true;
       s.onload = () => resolve(window.Chart);
       s.onerror = () => {
-        chartJsPromise = null;
+        window.__ignisChartJsPromise = null;
         reject(new Error('Failed to load Chart.js'));
       };
       document.head.appendChild(s);
     });
   }
-  return chartJsPromise;
+  return window.__ignisChartJsPromise;
 }
 
 const moduleCache = new Map();
@@ -119,6 +125,9 @@ async function navigate(tab) {
   }
   const activePanel = document.getElementById(`view-${tab}`);
   if (activePanel) refreshScrollReveals(activePanel);
+  if (tab === 'dashboard' && !document.getElementById('intro-splash')) {
+    document.querySelector('.hero-section[data-enter]')?.classList.add('is-entered');
+  }
   emit('tab:changed', tab);
 }
 
@@ -445,6 +454,7 @@ async function bootstrap() {
   });
 
   initGlobalSearch();
+  initSidebar();
   initMorphingDock();
   initScrollReveal();
   updateScenarioPill();
