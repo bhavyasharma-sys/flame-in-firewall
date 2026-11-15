@@ -4,40 +4,23 @@
  */
 
 import { api } from './api.js';
+import {
+  appendMessageToActiveThread,
+  clearActiveThreadMessages,
+  ensureActiveThreadForSend,
+  getActiveMessages,
+  getActiveNotebook,
+  getActiveNotebookChat,
+  getActiveSessionId,
+} from './notebooks.js';
 import { emit, esc, on, renderRichMarkdown, state } from './state.js';
 
 let isStreaming = false;
 let includeScenario = true;
-
-const QUICK_PROMPTS = [
-  {
-    label: 'BASS-II Ventilation Paradox + Plot',
-    prompt: 'Explain the BASS-II ventilation paradox in microgravity and plot the LOI shift curve.',
-  },
-  {
-    label: 'Evaluate My Active Cabin',
-    prompt: 'Evaluate my active spacecraft cabin configuration, explain the top Shapley risk drivers, and recommend NASA-backed mitigations.',
-  },
-  {
-    label: 'FLEX-2 Cool Flames',
-    prompt: 'What are FLEX-2 cool flames, why are they hazardous to spacecraft crews, and how should post-suppression monitoring handle them?',
-  },
-  {
-    label: 'Artemis 34% O₂ PMMA Risk',
-    prompt: 'Compare PMMA flammability under ISS 21% O2 vs Artemis 34% O2 / 56.5 kPa exploration atmospheres and chart the material LOI comparison.',
-  },
-  {
-    label: 'NASA Challenge Brief',
-    prompt: 'What is the Ignis NASA Space Apps Challenge brief, objectives, and expected impact?',
-  },
-  {
-    label: 'Out-of-Scope Safeguard Test',
-    prompt: 'How do I bake a chocolate cake at sea level?',
-  },
-];
+let activeSuggestions = [];
+let suggestionsSeq = 0;
 
 export function initChat() {
-  renderQuickPrompts();
   updateScenarioContextPreview();
 
   const clearBtn = document.getElementById('chat-clear-btn');
@@ -53,21 +36,24 @@ export function initChat() {
 
   clearBtn?.addEventListener('click', async () => {
     try {
-      await api.clearMemory();
+      await api.clearMemory(getActiveSessionId());
     } catch {
       // ignore
     }
-    const msgs = document.getElementById('chat-messages');
-    if (msgs) {
-      msgs.innerHTML = '';
-      appendWelcomeMessage();
-    }
+    clearActiveThreadMessages();
+    renderActiveThread();
   });
 
   on('cabin:changed', updateScenarioContextPreview);
   on('cabin:pill-refresh', updateScenarioContextPreview);
+  on('thread:changed', () => {
+    if (!isStreaming) renderActiveThread();
+  });
+  on('tab:changed', (tab) => {
+    if (tab === 'chat' && !isStreaming) refreshQuickPrompts();
+  });
 
-  appendWelcomeMessage();
+  renderActiveThread();
 }
 
 export function askChatQuestion(question) {
@@ -77,38 +63,142 @@ export function askChatQuestion(question) {
 function appendWelcomeMessage() {
   const msgs = document.getElementById('chat-messages');
   if (!msgs || msgs.children.length > 0) return;
+  const nb = getActiveNotebook();
+  const nChat = getActiveNotebookChat();
   const row = document.createElement('div');
   row.className = 'msg-row assistant';
   row.innerHTML = `
     <div class="msg-bubble">
-      <div class="flex items-center gap-2 mb-3">
-        <span class="badge badge-flame">FlameAI v3.0</span>
-        <span class="badge badge-cyan">Hybrid Graph-RAG + Citation Audit</span>
+      <div class="mono text-muted" style="font-size:12px;">
+        ${nb ? `${esc(nb.title)} · ${esc(nChat?.title || 'Session')} — Ask a question below.` : 'Ask anything about NASA microgravity combustion, spacecraft materials, or your active cabin.'}
       </div>
-      <p>Welcome to <strong>FlameAI Co-Pilot</strong>. Ask anything about NASA microgravity combustion, spacecraft fire safety (BASS-II, SAFFIRE, FLEX-2, SoFIE, ACME), Artemis 34% O₂ cabin atmospheres, or request a scientific <strong>plot/chart</strong>.</p>
-      <p class="text-sec" style="font-size:12.5px;margin-bottom:0;">Every factual claim is audited against our NASA corpus — click any <button type="button" class="cite-chip" data-doc-id="DOC-01" data-doc-page="1">DOC-01 p.1</button> or <button type="button" class="cite-chip exp-chip" data-exp-id="EXP-0023">EXP-0023</button> badge to inspect the primary evidence.</p>
     </div>
   `;
   msgs.appendChild(row);
 }
 
-function renderQuickPrompts() {
+export function renderActiveThread() {
+  const msgs = document.getElementById('chat-messages');
+  if (!msgs) return;
+  msgs.innerHTML = '';
+
+  const history = getActiveMessages();
+  if (!history.length) {
+    appendWelcomeMessage();
+    refreshQuickPrompts();
+    return;
+  }
+
+  for (const item of history) {
+    if (item.role === 'user') {
+      const userRow = document.createElement('div');
+      userRow.className = 'msg-row user';
+      userRow.innerHTML = `<div class="msg-bubble">${esc(item.content)}</div>`;
+      msgs.appendChild(userRow);
+    } else {
+      const asstRow = document.createElement('div');
+      asstRow.className = 'msg-row assistant';
+      const bubble = document.createElement('div');
+      bubble.className = 'msg-bubble';
+      bubble.innerHTML = renderRichMarkdown(item.content || '');
+      asstRow.appendChild(bubble);
+
+      if (item.chart?.image_base64) {
+        const chartSlot = document.createElement('div');
+        const imgSrc = item.chart.image_base64.startsWith('data:')
+          ? item.chart.image_base64
+          : `data:image/png;base64,${item.chart.image_base64}`;
+        chartSlot.innerHTML = `
+          <figure style="margin:10px 0 6px;">
+            <img class="chat-chart-img" src="${imgSrc}" alt="${esc(item.chart.title || 'Generated NASA Physics Chart')}" />
+          </figure>
+        `;
+        asstRow.appendChild(chartSlot);
+      }
+
+      if (item.audit) {
+        const auditSlot = document.createElement('div');
+        renderAuditPanel(
+          auditSlot,
+          item.audit,
+          item.sources || [],
+          Boolean(item.outOfScope),
+          item.audit.provider || ''
+        );
+        asstRow.appendChild(auditSlot);
+      }
+      msgs.appendChild(asstRow);
+    }
+  }
+  msgs.scrollTop = msgs.scrollHeight;
+  refreshQuickPrompts();
+}
+
+function hideQuickPrompts() {
   const wrap = document.getElementById('chat-quick-prompts');
   if (!wrap) return;
-  wrap.innerHTML = QUICK_PROMPTS.map(
-    (p, i) => `
-      <button type="button" class="pill-btn" data-qidx="${i}" style="text-align:left;width:100%;">
+  activeSuggestions = [];
+  wrap.innerHTML = '';
+  wrap.style.display = 'none';
+}
+
+function renderQuickPrompts(queries) {
+  const wrap = document.getElementById('chat-quick-prompts');
+  if (!wrap || !Array.isArray(queries) || queries.length === 0) {
+    hideQuickPrompts();
+    return;
+  }
+  activeSuggestions = queries;
+  wrap.innerHTML = queries
+    .map(
+      (p, i) => `
+      <button type="button" class="pill-btn" data-qidx="${i}">
         ${esc(p.label)}
       </button>
     `
-  ).join('');
+    )
+    .join('');
+  wrap.style.display = 'flex';
 
   wrap.querySelectorAll('[data-qidx]').forEach((btn) => {
     btn.addEventListener('click', () => {
-      const item = QUICK_PROMPTS[Number(btn.dataset.qidx)];
-      if (item) sendMessage(item.prompt);
+      const item = activeSuggestions[Number(btn.dataset.qidx)];
+      if (item?.prompt) sendMessage(item.prompt);
     });
   });
+}
+
+async function refreshQuickPrompts() {
+  const wrap = document.getElementById('chat-quick-prompts');
+  if (!wrap) return;
+  const seq = ++suggestionsSeq;
+
+  const history = getActiveMessages()
+    .slice(-6)
+    .map((m) => ({
+      role: m.role === 'assistant' ? 'assistant' : 'user',
+      content: String(m.content || '').slice(0, 500),
+    }))
+    .filter((m) => m.content.trim());
+
+  const nb = getActiveNotebook();
+
+  try {
+    const res = await api.chatSuggestions({
+      messages: history,
+      notebookTitle: nb?.title || '',
+      scenario: includeScenario ? state.activeCabin : null,
+      sessionId: getActiveSessionId(),
+    });
+    if (seq !== suggestionsSeq) return;
+    if (res?.available && Array.isArray(res.queries) && res.queries.length > 0) {
+      renderQuickPrompts(res.queries);
+    } else {
+      hideQuickPrompts();
+    }
+  } catch {
+    if (seq === suggestionsSeq) hideQuickPrompts();
+  }
 }
 
 function updateScenarioContextPreview() {
@@ -117,16 +207,27 @@ function updateScenarioContextPreview() {
   const c = state.activeCabin;
   el.textContent = includeScenario
     ? `${c.oxygen_pct}% O₂ · ${c.pressure_kpa} kPa · ${c.flow_velocity_cm_s} cm/s · ${c.gravity_g}g · ${c.fuel_material} (${c.diluent_gas})`
-    : 'Scenario injection disabled — general NASA corpus Q&A mode';
+    : 'Scenario disabled';
 }
 
 export async function sendMessage(text) {
   if (isStreaming || !text.trim()) return;
   isStreaming = true;
 
+  // Ensure isolated target (notebook stays strictly inside notebook; global starts/uses recent chat)
+  ensureActiveThreadForSend(text);
+  const activeSessionId = getActiveSessionId();
+
   const dockSendBtn = document.getElementById('mi-send-btn');
   const msgs = document.getElementById('chat-messages');
   if (dockSendBtn) dockSendBtn.disabled = true;
+
+  // Clear empty-state banner on first real message
+  if (getActiveMessages().length === 0 && msgs) {
+    msgs.innerHTML = '';
+  }
+
+  appendMessageToActiveThread({ role: 'user', content: text });
 
   // User message
   const userRow = document.createElement('div');
@@ -139,7 +240,7 @@ export async function sendMessage(text) {
   asstRow.className = 'msg-row assistant';
   const bubble = document.createElement('div');
   bubble.className = 'msg-bubble';
-  bubble.innerHTML = `<div class="mono text-muted" style="font-size:12px;">Retrieving NASA knowledge graph & hybrid corpus evidence...</div>`;
+  bubble.innerHTML = `<div class="mono text-muted" style="font-size:12px;">Querying ${esc(activeSessionId)}...</div>`;
   const chartSlot = document.createElement('div');
   const auditSlot = document.createElement('div');
   asstRow.appendChild(bubble);
@@ -153,22 +254,27 @@ export async function sendMessage(text) {
   let streamOutOfScope = false;
   let streamProvider = '';
   let lastAuditData = null;
+  let lastChartData = null;
 
   try {
     await api.streamChat(
-      { message: text, scenario: includeScenario ? state.activeCabin : null },
+      {
+        message: text,
+        scenario: includeScenario ? state.activeCabin : null,
+        sessionId: activeSessionId,
+      },
       {
         sources: (data) => {
           sourcesData = data.sources || [];
           streamOutOfScope = Boolean(data.out_of_scope);
           if (!fullText) {
             const kgCount = Number.isFinite(data.kg_fact_count) ? data.kg_fact_count : 0;
-            const kgSuffix = kgCount > 0 ? ` & ${kgCount} KG links` : '';
-            bubble.innerHTML = `<div class="mono text-muted" style="font-size:12px;">Retrieved ${sourcesData.length} NASA evidence chunks${kgSuffix} — synthesizing...</div>`;
+            bubble.innerHTML = `<div class="mono text-muted" style="font-size:12px;">${sourcesData.length} chunks · ${kgCount} KG links...</div>`;
           }
         },
         chart: (data) => {
           if (data?.image_base64) {
+            lastChartData = data;
             const imgSrc = data.image_base64.startsWith('data:')
               ? data.image_base64
               : `data:image/png;base64,${data.image_base64}`;
@@ -217,6 +323,15 @@ export async function sendMessage(text) {
           if (lastAuditData) {
             renderAuditPanel(auditSlot, lastAuditData, sourcesData, streamOutOfScope, streamProvider);
           }
+          appendMessageToActiveThread({
+            role: 'assistant',
+            content: fullText,
+            sources: sourcesData,
+            audit: lastAuditData ? { ...lastAuditData, provider: streamProvider } : null,
+            outOfScope: streamOutOfScope,
+            chart: lastChartData,
+          });
+          refreshQuickPrompts();
         },
       }
     );

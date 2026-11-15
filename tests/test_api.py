@@ -11,6 +11,7 @@ import json
 import threading
 import time
 import unittest
+from unittest.mock import patch
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from fastapi.testclient import TestClient
@@ -795,6 +796,44 @@ class FlameInFreefallAPITests(unittest.TestCase):
                         groq_model=prev_models["groq"],
                         openrouter_model=prev_models["openrouter"],
                     )
+
+    def test_chat_suggestions_only_when_ai_available(self) -> None:
+        # When running in offline_grounded mode (no live AI), quick queries must be hidden/empty
+        prev_pref = server.engine.llm.preferred_provider
+        prev_openai = server.engine.llm.openai_key
+        try:
+            server.engine.llm.update_credentials(preferred_provider="offline_grounded")
+            r_off = self.client.post(
+                "/api/chat/suggestions",
+                json={"messages": [{"role": "user", "content": "Explain BASS-II"}]},
+            )
+            self.assertEqual(r_off.status_code, 200)
+            self.assertEqual(r_off.json(), {"available": False, "queries": []})
+
+            # When a live AI provider is configured and returns JSON queries, return them
+            server.engine.llm.update_credentials(
+                preferred_provider="openai",
+                openai_key="sk-test-1234567890",
+            )
+            with patch.object(
+                server.engine.llm,
+                "_call_openai_compat",
+                return_value='[{"label":"BASS-II Flow Curve","prompt":"Plot the BASS-II opposed-flow LOI shift curve."}]',
+            ):
+                r_on = self.client.post(
+                    "/api/chat/suggestions",
+                    json={"messages": [{"role": "user", "content": "Explain BASS-II"}]},
+                )
+                self.assertEqual(r_on.status_code, 200)
+                data = r_on.json()
+                self.assertTrue(data["available"])
+                self.assertEqual(len(data["queries"]), 1)
+                self.assertEqual(data["queries"][0]["label"], "BASS-II Flow Curve")
+        finally:
+            server.engine.llm.update_credentials(
+                preferred_provider=prev_pref,
+                openai_key=prev_openai,
+            )
 
 
 if __name__ == "__main__":

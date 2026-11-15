@@ -51,8 +51,8 @@ function ensureObserver() {
       }
     },
     {
-      threshold: 0.12,
-      rootMargin: '0px 0px -48px 0px',
+      threshold: 0.01,
+      rootMargin: '80px 0px 80px 0px',
     }
   );
   return revealObserver;
@@ -75,8 +75,7 @@ export function refreshScrollReveals(root = document) {
   const vh = window.innerHeight || 900;
   root.querySelectorAll('[data-reveal]:not(.is-revealed)').forEach((el) => {
     const rect = el.getBoundingClientRect();
-    // Elements already well inside the initial viewport on load animate cleanly on next frame
-    if (rect.width > 0 && rect.height > 0 && rect.top < vh * 0.92 && rect.bottom > 0) {
+    if (rect.width > 0 && rect.height > 0 && rect.top < vh * 1.15 && rect.bottom > -80) {
       requestAnimationFrame(() => el.classList.add('is-revealed'));
     } else {
       obs.observe(el);

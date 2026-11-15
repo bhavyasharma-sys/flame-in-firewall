@@ -36,6 +36,29 @@ function bindHeroAndPanels() {
   });
 }
 
+function loadChartJsIfNeeded() {
+  if (typeof window.Chart !== 'undefined') return Promise.resolve(window.Chart);
+  if (window.__ignisChartJsPromise) return window.__ignisChartJsPromise;
+  window.__ignisChartJsPromise = new Promise((resolve, reject) => {
+    const existing = document.querySelector('script[src*="/js/vendor/chart.umd.min.js"]');
+    if (existing) {
+      existing.addEventListener('load', () => resolve(window.Chart));
+      existing.addEventListener('error', () => reject(new Error('Failed to load Chart.js')));
+      return;
+    }
+    const s = document.createElement('script');
+    s.src = '/js/vendor/chart.umd.min.js';
+    s.async = true;
+    s.onload = () => resolve(window.Chart);
+    s.onerror = () => {
+      window.__ignisChartJsPromise = null;
+      reject(new Error('Failed to load Chart.js'));
+    };
+    document.head.appendChild(s);
+  });
+  return window.__ignisChartJsPromise;
+}
+
 export async function initDashboard() {
   bindHeroAndPanels();
 
@@ -44,15 +67,11 @@ export async function initDashboard() {
       api.stats(),
       api.summary(),
       api.findings(),
+      loadChartJsIfNeeded().catch(() => null),
     ]);
     cachedStats = stats;
     state.stats = stats;
     state.findings = findingsRes.findings || [];
-
-    const runsBadge = document.getElementById('showcase-runs-badge');
-    if (runsBadge && stats.total_test_runs) {
-      runsBadge.textContent = `+${stats.total_test_runs} NASA Runs`;
-    }
 
     renderKPIs(stats);
     renderMissionBrief(summary);
@@ -76,9 +95,9 @@ function renderKPIs(s) {
 
   const cards = [
     {
-      label: 'NASA Experiments & Runs',
-      value: `${s.total_experiments} + ${s.total_test_runs}`,
-      sub: 'BASS, ACME, SAFFIRE, FLEX & SoFIE runs',
+      label: 'Experiments & Runs',
+      value: `${s.total_experiments} · ${s.total_test_runs}`,
+      sub: `${s.total_experiments} missions · ${s.total_test_runs} PSI runs`,
       accent: 'var(--accent-flame)',
       iconBg: 'var(--accent-flame-soft)',
       icon: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 3h6"/><path d="M10 3v6l-5 9a2 2 0 0 0 1.7 3h10.6a2 2 0 0 0 1.7-3l-5-9V3"/></svg>',
@@ -87,7 +106,7 @@ function renderKPIs(s) {
     {
       label: 'Materials & Findings',
       value: `${s.materials_tested} · ${s.key_findings}`,
-      sub: 'Calibrated LOI polymers & flight milestones',
+      sub: `${s.materials_tested} LOI polymers · ${s.key_findings} findings`,
       accent: 'var(--accent-cyan)',
       iconBg: 'var(--accent-cyan-soft)',
       icon: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>',
@@ -96,16 +115,16 @@ function renderKPIs(s) {
     {
       label: 'Knowledge Graph',
       value: `${s.graph_nodes}`,
-      sub: `${s.graph_edges} linked NASA safety relations`,
+      sub: `${s.graph_nodes} nodes · ${s.graph_edges} edges`,
       accent: 'var(--accent-violet)',
       iconBg: 'var(--accent-violet-soft)',
       icon: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="6" cy="6" r="3"/><circle cx="18" cy="6" r="3"/><circle cx="12" cy="18" r="3"/><line x1="8.5" y1="7.5" x2="15.5" y2="7.5"/><line x1="7.5" y1="8.5" x2="10.8" y2="15.4"/><line x1="16.5" y1="8.5" x2="13.2" y2="15.4"/></svg>',
       tab: 'graph',
     },
     {
-      label: 'NASA Papers & PDFs',
+      label: 'NASA Corpus',
       value: `${s.nasa_documents}`,
-      sub: 'Indexed NTRS reports + 9 official NASA PDFs',
+      sub: `${s.nasa_documents} indexed docs · 9 PDFs`,
       accent: 'var(--accent-sage)',
       iconBg: 'var(--accent-sage-bg)',
       icon: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>',
@@ -144,41 +163,39 @@ function renderMissionBrief(summary) {
   el.innerHTML = `
     <div class="flex items-center justify-between flex-wrap gap-3 mb-3">
       <div>
-        <div class="card-kicker">AI MISSION BRIEF</div>
-        <h2 style="font-family:var(--font-display);font-size:21px;font-weight:800;letter-spacing:-0.025em;margin:0;">Fire Safety Intelligence Summary</h2>
+        <div class="card-kicker">TELEMETRY BRIEF</div>
+        <h2 style="font-family:var(--font-display);font-size:19px;font-weight:800;letter-spacing:-0.025em;margin:0;">Safety Metrics &amp; Directives</h2>
       </div>
       <div class="flex gap-2 flex-wrap">
-        <button type="button" class="btn btn-primary btn-sm" id="brief-launch-twin">Launch 3D Flame Twin</button>
-        <button type="button" class="btn btn-sm" id="brief-launch-cabin">Open Cabin Shapley Lab</button>
-        <button type="button" class="btn btn-sm" id="brief-launch-chat">Ask FlameAI</button>
+        <button type="button" class="btn btn-primary btn-sm" id="brief-launch-twin">3D Flame Twin</button>
+        <button type="button" class="btn btn-sm" id="brief-launch-cabin">Cabin Shapley Lab</button>
+        <button type="button" class="btn btn-sm" id="brief-launch-chat">FlameAI</button>
       </div>
     </div>
-
-    <p style="font-size:14px;margin:0 0 16px;color:var(--text-secondary);line-height:1.6;">${esc(summary.headline)}</p>
 
     <div class="grid-3 mb-3">
-      <div style="background:var(--bg-surface-solid);border:1px solid var(--border-subtle);border-radius:14px;padding:14px 16px;">
-        <div style="font-size:10.5px;font-weight:700;letter-spacing:0.07em;text-transform:uppercase;color:var(--text-muted);">Top-Ranked Experiment</div>
-        <div style="font-weight:800;font-size:15.5px;margin:5px 0 3px;color:var(--text-primary);">${esc(summary.top_ranked_experiment?.name)}</div>
-        <div class="text-sec" style="font-size:12px;">Score <span class="mono" style="font-weight:600;color:var(--accent-flame);">${esc(summary.top_ranked_experiment?.score)}</span> · ${esc(summary.top_ranked_experiment?.reason)}</div>
+      <div style="background:var(--bg-surface-solid);border:1px solid var(--border-subtle);border-radius:14px;padding:16px 18px;">
+        <div style="font-size:10.5px;font-weight:700;letter-spacing:0.07em;text-transform:uppercase;color:var(--text-muted);">Top Experiment</div>
+        <div style="font-weight:800;font-size:15.5px;margin:6px 0 4px;color:var(--text-primary);">${esc(summary.top_ranked_experiment?.name)}</div>
+        <div class="mono" style="font-size:12px;color:var(--accent-flame);font-weight:600;">Score ${esc(summary.top_ranked_experiment?.score)}</div>
       </div>
 
-      <div style="background:var(--bg-surface-solid);border:1px solid var(--border-subtle);border-radius:14px;padding:14px 16px;">
-        <div style="font-size:10.5px;font-weight:700;letter-spacing:0.07em;text-transform:uppercase;color:var(--text-muted);">Highest Risk in 34% O₂ (Artemis)</div>
-        <div style="font-weight:800;font-size:15.5px;margin:5px 0 3px;color:var(--risk-crit);">${esc(summary.highest_risk_material_34_o2?.name)}</div>
-        <div class="text-sec" style="font-size:12px;">PMMA Artemis Risk: <span class="mono" style="font-weight:600;">${esc(summary.highest_risk_material_34_o2?.pmma_artemis_risk_index)}/100</span> (LOI ${esc(summary.highest_risk_material_34_o2?.pmma_artemis_loi)}%)</div>
+      <div style="background:var(--bg-surface-solid);border:1px solid var(--border-subtle);border-radius:14px;padding:16px 18px;">
+        <div style="font-size:10.5px;font-weight:700;letter-spacing:0.07em;text-transform:uppercase;color:var(--text-muted);">34% O₂ Peak Risk</div>
+        <div style="font-weight:800;font-size:15.5px;margin:6px 0 4px;color:var(--risk-crit);">${esc(summary.highest_risk_material_34_o2?.name)}</div>
+        <div class="mono text-sec" style="font-size:12px;">Risk ${esc(summary.highest_risk_material_34_o2?.pmma_artemis_risk_index)}/100 · LOI ${esc(summary.highest_risk_material_34_o2?.pmma_artemis_loi)}%</div>
       </div>
 
-      <div style="background:var(--bg-surface-solid);border:1px solid var(--border-subtle);border-radius:14px;padding:14px 16px;">
-        <div style="font-size:10.5px;font-weight:700;letter-spacing:0.07em;text-transform:uppercase;color:var(--text-muted);">Priority Safety Directive</div>
-        <div style="font-weight:800;font-size:15.5px;margin:5px 0 3px;color:var(--accent-cyan);">${esc(summary.priority_safety_directive?.title)}</div>
-        <div class="text-sec" style="font-size:12px;">${esc(summary.priority_safety_directive?.recommendation)}</div>
+      <div style="background:var(--bg-surface-solid);border:1px solid var(--border-subtle);border-radius:14px;padding:16px 18px;">
+        <div style="font-size:10.5px;font-weight:700;letter-spacing:0.07em;text-transform:uppercase;color:var(--text-muted);">Priority Directive</div>
+        <div style="font-weight:800;font-size:15.5px;margin:6px 0 4px;color:var(--accent-cyan);">${esc(summary.priority_safety_directive?.title)}</div>
+        <div class="mono text-sec" style="font-size:11.5px;">NASA-STD-6001B</div>
       </div>
     </div>
 
-    <div style="font-size:12.5px;color:var(--text-secondary);padding-top:10px;border-top:1px solid var(--border-subtle);">
-      <strong style="color:var(--text-primary);">Priority Engineering Actions</strong> <span class="text-muted">(click inline citations to inspect NASA papers)</span>
-      <ul style="margin:7px 0 0;padding-left:18px;">${actionsHtml}</ul>
+    <div style="font-size:12.5px;color:var(--text-secondary);padding-top:12px;border-top:1px solid var(--border-subtle);">
+      <strong style="color:var(--text-primary);">Mitigation Actions</strong>
+      <ul style="margin:8px 0 0;padding-left:18px;">${actionsHtml}</ul>
     </div>
   `;
 
@@ -269,18 +286,17 @@ function renderFindingsFeed(findings) {
   wrap.innerHTML = top
     .map(
       (f) => `
-      <div style="background:var(--bg-surface-solid);border:1px solid var(--border-subtle);border-radius:16px;padding:16px 18px;display:flex;flex-direction:column;justify-content:space-between;gap:10px;">
+      <div style="background:var(--bg-surface-solid);border:1px solid var(--border-subtle);border-radius:16px;padding:18px 20px;display:flex;flex-direction:column;justify-content:space-between;gap:12px;">
         <div>
           <div class="flex items-center justify-between gap-2 mb-3">
             <span class="badge badge-cyan">${esc(f.source_experiment)}</span>
             <span class="badge ${String(f.safety_relevance).toUpperCase().includes('CRIT') ? 'risk-CRITICAL' : 'badge-flame'}">${esc(f.safety_relevance || 'High')}</span>
           </div>
-          <h4 style="margin:0 0 6px;font-family:var(--font-display);font-size:14.5px;font-weight:700;line-height:1.35;">${esc(f.title)}</h4>
-          <p class="text-sec" style="font-size:12.5px;margin:0;line-height:1.55;">${esc(f.description)}</p>
+          <h4 style="margin:0;font-family:var(--font-display);font-size:14.5px;font-weight:700;line-height:1.35;">${esc(f.title)}</h4>
         </div>
         ${
           f.quantitative_result
-            ? `<div class="mono" style="font-size:11.5px;color:var(--accent-cyan);padding:7px 10px;background:var(--bg-surface-2);border-radius:9px;">${esc(f.quantitative_result)}</div>`
+            ? `<div class="mono" style="font-size:11.5px;color:var(--accent-cyan);padding:8px 11px;background:var(--bg-surface-2);border-radius:9px;">${esc(f.quantitative_result)}</div>`
             : ''
         }
       </div>

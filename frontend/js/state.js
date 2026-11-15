@@ -96,11 +96,11 @@ export function riskColor(band) {
 }
 
 export function renderRichMarkdown(rawText) {
-  // Strip any raw trailing "Cited NASA Sources:" footer line (rendered cleanly in the Sources box)
-  const stripped = String(rawText || '').replace(
-    /\n*(?:\*\*|#{1,4}\s*)?Cited NASA Sources:\*?\*?\s*[\s\S]*$/i,
-    ''
-  );
+  // Strip redundant leading "FlameAI Grounded Synthesis — [query]" title clutter
+  // and trailing "Cited NASA Sources:" footer (rendered inline as clickable chips)
+  const stripped = String(rawText || '')
+    .replace(/^(?:#{1,4}\s*|\*\*)?FlameAI\s+Grounded\s+Synthesis(?:\s*[—–-]\s*.*)?\*?\*?\s*\n+/i, '')
+    .replace(/\n*(?:\*\*|#{1,4}\s*)?Cited NASA Sources:\*?\*?\s*[\s\S]*$/i, '');
   const safe = esc(stripped);
   const lines = safe.split('\n');
   let html = '';

@@ -119,18 +119,18 @@ export const api = {
   graph: () => jsonFetch('/api/graph'),
   graphNode: (nodeId) => jsonFetch(`/api/graph/node/${encodeURIComponent(nodeId)}`),
 
-  clearMemory: () =>
+  clearMemory: (sessionId = null) =>
     jsonFetch('/api/chat/memory', {
       method: 'DELETE',
-      headers: { 'X-Session-Id': getSessionId() },
+      headers: { 'X-Session-Id': sessionId || getSessionId() },
     }),
 
-  async streamChat({ message, scenario = null }, handlers = {}) {
+  async streamChat({ message, scenario = null, sessionId = null }, handlers = {}) {
     const res = await fetch('/api/chat/stream', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'X-Session-Id': getSessionId(),
+        'X-Session-Id': sessionId || getSessionId(),
       },
       body: JSON.stringify({ message, scenario }),
     });
@@ -169,4 +169,14 @@ export const api = {
       }
     }
   },
+  chatSuggestions: ({ messages = [], notebookTitle = '', scenario = null, sessionId = null } = {}) =>
+    request('/api/chat/suggestions', {
+      method: 'POST',
+      headers: sessionHeaders(sessionId),
+      body: JSON.stringify({
+        messages,
+        notebook_title: notebookTitle,
+        scenario,
+      }),
+    }),
 };
