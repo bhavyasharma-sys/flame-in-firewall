@@ -17,6 +17,8 @@ from config import (
     GEMINI_MODEL,
     GROQ_API_KEY,
     GROQ_MODEL,
+    OPENAI_API_KEY,
+    OPENAI_MODEL,
     OPENROUTER_API_KEY,
     OPENROUTER_MODEL,
     SYSTEM_PROMPT,
@@ -25,24 +27,123 @@ from config import (
 logger = logging.getLogger(__name__)
 
 
+def _is_valid_key(key: str) -> bool:
+    k = (key or "").strip()
+    return bool(k) and not k.startswith("your_")
+
+
+def _mask_key(key: str) -> str:
+    k = (key or "").strip()
+    if not _is_valid_key(k):
+        return ""
+    if len(k) <= 8:
+        return "••••"
+    return f"{k[:4]}••••{k[-4:]}"
+
+
 class LLMClient:
-    """Unified provider-resilient LLM client with rich offline NASA grounding."""
+    """Unified provider-resilient LLM client with dynamic user credentials & offline NASA grounding."""
 
     def __init__(self):
+        self.openai_key = OPENAI_API_KEY
         self.openrouter_key = OPENROUTER_API_KEY
         self.gemini_key = GEMINI_API_KEY
         self.groq_key = GROQ_API_KEY
+
+        self.openai_model = OPENAI_MODEL
+        self.openrouter_model = OPENROUTER_MODEL
+        self.gemini_model = GEMINI_MODEL
+        self.groq_model = GROQ_MODEL
+
+        self.preferred_provider = "auto"
         self._provider = self._detect_provider()
         logger.info("LLMClient active provider: %s", self._provider)
 
+    def _has_provider_key(self, name: str) -> bool:
+        return {
+            "openai": _is_valid_key(self.openai_key),
+            "openrouter": _is_valid_key(self.openrouter_key),
+            "gemini": _is_valid_key(self.gemini_key),
+            "groq": _is_valid_key(self.groq_key),
+        }.get(name, False)
+
     def _detect_provider(self) -> str:
-        if self.openrouter_key and not self.openrouter_key.startswith("your_"):
-            return "openrouter"
-        if self.gemini_key and not self.gemini_key.startswith("your_"):
-            return "gemini"
-        if self.groq_key and not self.groq_key.startswith("your_"):
-            return "groq"
+        pref = (self.preferred_provider or "auto").strip().lower()
+        if pref == "offline_grounded":
+            return "offline_grounded"
+        if pref in ("openai", "openrouter", "gemini", "groq") and self._has_provider_key(pref):
+            return pref
+        for cand in ("openai", "openrouter", "gemini", "groq"):
+            if self._has_provider_key(cand):
+                return cand
         return "offline_grounded"
+
+    def update_credentials(
+        self,
+        *,
+        preferred_provider: Optional[str] = None,
+        openai_key: Optional[str] = None,
+        gemini_key: Optional[str] = None,
+        groq_key: Optional[str] = None,
+        openrouter_key: Optional[str] = None,
+        openai_model: Optional[str] = None,
+        gemini_model: Optional[str] = None,
+        groq_model: Optional[str] = None,
+        openrouter_model: Optional[str] = None,
+    ) -> None:
+        if preferred_provider is not None:
+            cand = preferred_provider.strip().lower()
+            if cand in ("auto", "openai", "gemini", "groq", "openrouter", "offline_grounded"):
+                self.preferred_provider = cand
+        if openai_key is not None:
+            self.openai_key = openai_key.strip() or OPENAI_API_KEY
+        if gemini_key is not None:
+            self.gemini_key = gemini_key.strip() or GEMINI_API_KEY
+        if groq_key is not None:
+            self.groq_key = groq_key.strip() or GROQ_API_KEY
+        if openrouter_key is not None:
+            self.openrouter_key = openrouter_key.strip() or OPENROUTER_API_KEY
+
+        if openai_model is not None and openai_model.strip():
+            self.openai_model = openai_model.strip()
+        if gemini_model is not None and gemini_model.strip():
+            self.gemini_model = gemini_model.strip()
+        if groq_model is not None and groq_model.strip():
+            self.groq_model = groq_model.strip()
+        if openrouter_model is not None and openrouter_model.strip():
+            self.openrouter_model = openrouter_model.strip()
+
+        self._provider = self._detect_provider()
+        logger.info("LLMClient updated -> active provider: %s", self._provider)
+
+    def get_provider_status(self) -> dict[str, Any]:
+        return {
+            "active_provider": self._provider,
+            "display_label": self.display_label,
+            "preferred_provider": self.preferred_provider,
+            "providers": {
+                "openai": {
+                    "configured": self._has_provider_key("openai"),
+                    "masked_key": _mask_key(self.openai_key),
+                    "model": self.openai_model,
+                },
+                "gemini": {
+                    "configured": self._has_provider_key("gemini"),
+                    "masked_key": _mask_key(self.gemini_key),
+                    "model": self.gemini_model,
+                },
+                "groq": {
+                    "configured": self._has_provider_key("groq"),
+                    "masked_key": _mask_key(self.groq_key),
+                    "model": self.groq_model,
+                },
+                "openrouter": {
+                    "configured": self._has_provider_key("openrouter"),
+                    "masked_key": _mask_key(self.openrouter_key),
+                    "model": self.openrouter_model,
+                },
+            },
+        }
 
     @property
     def active_provider(self) -> str:
@@ -55,11 +156,87 @@ class LLMClient:
     @property
     def display_label(self) -> str:
         return {
-            "openrouter": f"OpenRouter ({OPENROUTER_MODEL})",
-            "gemini": f"Google Gemini ({GEMINI_MODEL})",
-            "groq": f"Groq ({GROQ_MODEL})",
+            "openai": f"OpenAI ({self.openai_model})",
+            "openrouter": f"OpenRouter ({self.openrouter_model})",
+            "gemini": f"Google Gemini ({self.gemini_model})",
+            "groq": f"Groq ({self.groq_model})",
             "offline_grounded": "Offline NASA Grounded Engine",
         }.get(self._provider, "Offline NASA Grounded Engine")
+
+    def _provider_order(self) -> list[str]:
+        pref = (self.preferred_provider or "auto").strip().lower()
+        if pref == "offline_grounded":
+            return []
+        base = ["openai", "openrouter", "gemini", "groq"]
+        if pref in base:
+            base.remove(pref)
+            return [pref] + base
+        return base
+
+    def _stream_with_fallback(
+        self,
+        full_prompt: str,
+        *,
+        question: str,
+        is_out_of_scope: bool,
+        is_brief_query: bool,
+        search_results: list[dict[str, Any]],
+        matched_runs: list[dict[str, Any]],
+        cabin_eval: Optional[dict[str, Any]],
+        sources: list[dict[str, str]],
+    ) -> Generator[str, None, None]:
+        for provider in self._provider_order():
+            if not self._has_provider_key(provider):
+                continue
+            emitted_any = False
+            try:
+                if provider == "openai":
+                    gen = self._stream_openai_compat(
+                        "https://api.openai.com/v1/chat/completions",
+                        self.openai_key,
+                        self.openai_model,
+                        full_prompt,
+                    )
+                elif provider == "openrouter":
+                    gen = self._stream_openai_compat(
+                        "https://openrouter.ai/api/v1/chat/completions",
+                        self.openrouter_key,
+                        self.openrouter_model,
+                        full_prompt,
+                        extra_headers={"HTTP-Referer": "http://localhost:8000", "X-Title": "Ignis"},
+                    )
+                elif provider == "gemini":
+                    gen = self._chunk_stream(self._call_gemini_rest(full_prompt))
+                elif provider == "groq":
+                    gen = self._stream_openai_compat(
+                        "https://api.groq.com/openai/v1/chat/completions",
+                        self.groq_key,
+                        self.groq_model,
+                        full_prompt,
+                    )
+                else:
+                    continue
+
+                for chunk in gen:
+                    emitted_any = True
+                    yield chunk
+                if emitted_any:
+                    return
+            except Exception as exc:
+                logger.warning("Streaming provider %s failed (%s); falling back.", provider, exc)
+                if emitted_any:
+                    return
+
+        offline_text = self._synthesize_offline(
+            question=question,
+            is_out_of_scope=is_out_of_scope,
+            is_brief_query=is_brief_query,
+            search_results=search_results,
+            matched_runs=matched_runs,
+            cabin_eval=cabin_eval,
+            sources=sources,
+        )
+        yield from self._chunk_stream(offline_text)
 
     def generate(
         self,
@@ -75,56 +252,51 @@ class LLMClient:
     ) -> str | Generator[str, None, None]:
         full_prompt = self._build_prompt(question, context, is_out_of_scope)
 
-        # Try configured external providers in strict order
-        if self.openrouter_key and not self.openrouter_key.startswith("your_"):
+        if stream:
+            return self._stream_with_fallback(
+                full_prompt,
+                question=question,
+                is_out_of_scope=is_out_of_scope,
+                is_brief_query=is_brief_query,
+                search_results=search_results or [],
+                matched_runs=matched_runs or [],
+                cabin_eval=cabin_eval,
+                sources=sources or [],
+            )
+
+        for provider in self._provider_order():
+            if not self._has_provider_key(provider):
+                continue
             try:
-                if stream:
-                    return self._stream_openai_compat(
+                if provider == "openai":
+                    return self._call_openai_compat(
+                        "https://api.openai.com/v1/chat/completions",
+                        self.openai_key,
+                        self.openai_model,
+                        full_prompt,
+                    )
+                if provider == "openrouter":
+                    return self._call_openai_compat(
                         "https://openrouter.ai/api/v1/chat/completions",
                         self.openrouter_key,
-                        OPENROUTER_MODEL,
+                        self.openrouter_model,
                         full_prompt,
-                        extra_headers={"HTTP-Referer": "http://localhost:8000", "X-Title": "Flame in Freefall"},
+                        extra_headers={"HTTP-Referer": "http://localhost:8000", "X-Title": "Ignis"},
                     )
-                return self._call_openai_compat(
-                    "https://openrouter.ai/api/v1/chat/completions",
-                    self.openrouter_key,
-                    OPENROUTER_MODEL,
-                    full_prompt,
-                    extra_headers={"HTTP-Referer": "http://localhost:8000", "X-Title": "Flame in Freefall"},
-                )
-            except Exception as exc:
-                logger.warning("OpenRouter failed (%s); falling back.", exc)
-
-        if self.gemini_key and not self.gemini_key.startswith("your_"):
-            try:
-                text = self._call_gemini_rest(full_prompt)
-                if stream:
-                    return self._chunk_stream(text)
-                return text
-            except Exception as exc:
-                logger.warning("Gemini failed (%s); falling back.", exc)
-
-        if self.groq_key and not self.groq_key.startswith("your_"):
-            try:
-                if stream:
-                    return self._stream_openai_compat(
+                if provider == "gemini":
+                    return self._call_gemini_rest(full_prompt)
+                if provider == "groq":
+                    return self._call_openai_compat(
                         "https://api.groq.com/openai/v1/chat/completions",
                         self.groq_key,
-                        GROQ_MODEL,
+                        self.groq_model,
                         full_prompt,
                     )
-                return self._call_openai_compat(
-                    "https://api.groq.com/openai/v1/chat/completions",
-                    self.groq_key,
-                    GROQ_MODEL,
-                    full_prompt,
-                )
             except Exception as exc:
-                logger.warning("Groq failed (%s); falling back.", exc)
+                logger.warning("Provider %s failed (%s); falling back.", provider, exc)
 
         # Offline NASA Grounded Synthesizer
-        offline_text = self._synthesize_offline(
+        return self._synthesize_offline(
             question=question,
             is_out_of_scope=is_out_of_scope,
             is_brief_query=is_brief_query,
@@ -133,9 +305,6 @@ class LLMClient:
             cabin_eval=cabin_eval,
             sources=sources or [],
         )
-        if stream:
-            return self._chunk_stream(offline_text)
-        return offline_text
 
     def _build_prompt(self, question: str, context: str, is_out_of_scope: bool) -> str:
         parts = [SYSTEM_PROMPT, "\n\n---\n"]
@@ -205,7 +374,7 @@ class LLMClient:
                     continue
 
     def _call_gemini_rest(self, prompt: str) -> str:
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent?key={self.gemini_key}"
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{self.gemini_model}:generateContent?key={self.gemini_key}"
         payload = {
             "contents": [{"parts": [{"text": prompt}]}],
             "generationConfig": {"temperature": 0.25, "maxOutputTokens": 4096},

@@ -4,6 +4,7 @@
  */
 
 import { api } from './api.js';
+import { refreshScrollReveals } from './scroll-reveal.js';
 import { chartThemeColors, emit, esc, on, renderRichMarkdown, state } from './state.js';
 
 let categoryChart = null;
@@ -11,27 +12,6 @@ let regimeChart = null;
 let cachedStats = null;
 
 function bindHeroAndPanels() {
-  const input = document.getElementById('hero-prompt-input');
-  const submitBtn = document.getElementById('hero-prompt-submit');
-
-  const submitHero = () => {
-    const q = (input?.value || '').trim();
-    if (!q) {
-      emit('navigate', 'chat');
-      return;
-    }
-    input.value = '';
-    emit('chat:ask', q);
-  };
-
-  submitBtn?.addEventListener('click', submitHero);
-  input?.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      submitHero();
-    }
-  });
-
   document.querySelectorAll('#view-dashboard [data-hero-prompt]').forEach((btn) => {
     btn.addEventListener('click', () => {
       const q = btn.dataset.heroPrompt;
@@ -40,10 +20,19 @@ function bindHeroAndPanels() {
   });
 
   document.querySelectorAll('#view-dashboard [data-jump-tab]').forEach((btn) => {
-    btn.addEventListener('click', () => {
+    const go = () => {
       const tab = btn.dataset.jumpTab;
       if (tab) emit('navigate', tab);
-    });
+    };
+    btn.addEventListener('click', go);
+    if (btn.tagName !== 'BUTTON' && btn.tagName !== 'A') {
+      btn.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          go();
+        }
+      });
+    }
   });
 }
 
@@ -60,10 +49,18 @@ export async function initDashboard() {
     state.stats = stats;
     state.findings = findingsRes.findings || [];
 
+    const runsBadge = document.getElementById('showcase-runs-badge');
+    if (runsBadge && stats.total_test_runs) {
+      runsBadge.textContent = `+${stats.total_test_runs} NASA Runs`;
+    }
+
     renderKPIs(stats);
     renderMissionBrief(summary);
     renderDashboardCharts(stats);
     renderFindingsFeed(state.findings);
+
+    const dashPanel = document.getElementById('view-dashboard');
+    if (dashPanel) refreshScrollReveals(dashPanel);
   } catch (err) {
     console.error('Dashboard load error:', err);
   }
@@ -246,7 +243,7 @@ function renderDashboardCharts(s) {
             data: entries.map(([, v]) => v),
             backgroundColor: entries.map(([k]) => palette[k] || '#7c3aed'),
             borderWidth: 3,
-            borderColor: state.theme === 'light' ? '#ffffff' : '#0f172a',
+            borderColor: state.theme === 'light' ? '#ffffff' : '#0b0b0e',
           },
         ],
       },

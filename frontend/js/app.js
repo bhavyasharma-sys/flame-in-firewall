@@ -1,31 +1,124 @@
 /**
- * Flame in Freefall v3.0 — Main Application Bootstrapper
- * Coordinates routing, Dark/Light mode slider, Global Search, Shared Cabin Scenario Pill,
- * Global Modal / Document Reader, and delegated citation chip navigation.
+ * Ignis v3.0 — Main Application Bootstrapper
+ * Fast lazy-hydrated shell: loads ONLY Dashboard on initial entry and dynamically
+ * imports heavier tabs (3D Flame Twin, Cabin & Shapley, Run Ranker, Explorer,
+ * FlameAI Chat, Knowledge Graph, NASA Library, and Chart.js) on demand.
  */
 
 import { api } from './api.js';
-import { initCabin } from './cabin.js';
-import { initChat } from './chat.js';
 import { initDashboard } from './dashboard.js';
-import { initExplorer, openExperimentModal } from './explorer.js';
-import { initFlameTwin } from './flame-twin.js';
-import { initGraph } from './graph.js';
-import { initRanking, openEntityRankingTab, selectRunForTelemetry } from './ranking.js';
-import { initResources, openDocumentReader } from './resources.js';
+import { hasGlassIntroStarted, playGlassIntro } from './glass-intro.js';
+import { initMorphingDock } from './morphing-dock.js';
+import {
+  applyPreferences,
+  getPreferences,
+  syncSettingsOnStartup,
+  updateEngineStatusBadge,
+} from './preferences.js';
+import { initScrollReveal, refreshScrollReveals } from './scroll-reveal.js';
 import { emit, esc, on, riskColor, setActiveCabin, setTheme, state } from './state.js';
 
-function navigate(tab) {
+let chartJsPromise = null;
+function ensureChartJs() {
+  if (typeof window.Chart !== 'undefined') return Promise.resolve(window.Chart);
+  if (!chartJsPromise) {
+    chartJsPromise = new Promise((resolve, reject) => {
+      const s = document.createElement('script');
+      s.src = '/js/vendor/chart.umd.min.js';
+      s.async = true;
+      s.onload = () => resolve(window.Chart);
+      s.onerror = () => {
+        chartJsPromise = null;
+        reject(new Error('Failed to load Chart.js'));
+      };
+      document.head.appendChild(s);
+    });
+  }
+  return chartJsPromise;
+}
+
+const moduleCache = new Map();
+const moduleInitPromises = new Map();
+
+const TAB_LOADERS = {
+  twin: async () => {
+    const mod = await import('./flame-twin.js');
+    await mod.initFlameTwin();
+    return mod;
+  },
+  cabin: async () => {
+    const [, mod] = await Promise.all([ensureChartJs(), import('./cabin.js')]);
+    await mod.initCabin();
+    return mod;
+  },
+  ranking: async () => {
+    const [, mod] = await Promise.all([ensureChartJs(), import('./ranking.js')]);
+    await mod.initRanking();
+    return mod;
+  },
+  explorer: async () => {
+    const [, mod] = await Promise.all([ensureChartJs(), import('./explorer.js')]);
+    await mod.initExplorer();
+    return mod;
+  },
+  chat: async () => {
+    const mod = await import('./chat.js');
+    mod.initChat();
+    return mod;
+  },
+  graph: async () => {
+    const mod = await import('./graph.js');
+    await mod.initGraph();
+    return mod;
+  },
+  resources: async () => {
+    const mod = await import('./resources.js');
+    await mod.initResources();
+    return mod;
+  },
+  settings: async () => {
+    const mod = await import('./settings.js');
+    await mod.initSettings();
+    return mod;
+  },
+};
+
+function ensureTabModule(tab) {
+  if (!TAB_LOADERS[tab]) return Promise.resolve(null);
+  if (moduleCache.has(tab)) return Promise.resolve(moduleCache.get(tab));
+  if (!moduleInitPromises.has(tab)) {
+    const job = TAB_LOADERS[tab]()
+      .then((mod) => {
+        moduleCache.set(tab, mod);
+        return mod;
+      })
+      .catch((err) => {
+        moduleInitPromises.delete(tab);
+        console.error(`Failed to initialize module "${tab}":`, err);
+        return null;
+      });
+    moduleInitPromises.set(tab, job);
+  }
+  return moduleInitPromises.get(tab);
+}
+
+async function navigate(tab) {
   state.activeTab = tab;
   document.querySelectorAll('.view-panel').forEach((p) => {
     p.classList.toggle('active', p.id === `view-${tab}`);
   });
-  document.querySelectorAll('.nav-item').forEach((btn) => {
+  document.querySelectorAll('.nav-item, #nav-settings-btn').forEach((btn) => {
     btn.classList.toggle('active', btn.dataset.tab === tab);
   });
-  // Close mobile drawer if open
   document.getElementById('mobile-drawer')?.classList.remove('open');
   window.scrollTo({ top: 0, behavior: 'instant' });
+
+  // Lazily hydrate the target tab's module on first visit
+  if (TAB_LOADERS[tab] && !moduleCache.has(tab)) {
+    await ensureTabModule(tab);
+  }
+  const activePanel = document.getElementById(`view-${tab}`);
+  if (activePanel) refreshScrollReveals(activePanel);
   emit('tab:changed', tab);
 }
 
@@ -39,6 +132,45 @@ function updateScenarioPill() {
   const band = ev?.risk_band || 'MODERATE';
   if (dot) dot.style.background = riskColor(band);
   text.textContent = `${c.oxygen_pct}% O₂ · ${c.pressure_kpa} kPa · ${c.flow_velocity_cm_s} cm/s · ${c.gravity_g}g · ${c.fuel_material}${ev ? ` · Risk ${ev.risk_index.toFixed(0)}` : ''}`;
+}
+
+async function openSearchItem(item) {
+  if (!item) return;
+  const type = item.type;
+  const id = item.id;
+  if (type === 'paper') {
+    const mod = await ensureTabModule('resources');
+    mod?.openDocumentReader(id, 1);
+  } else if (type === 'test_run') {
+    await navigate('ranking');
+    const mod = await ensureTabModule('ranking');
+    mod?.selectRunForTelemetry(id);
+  } else if (type === 'material') {
+    await navigate('cabin');
+    let targetMat = id;
+    try {
+      const mRes = await fetch(`/api/materials/${encodeURIComponent(id)}`);
+      if (mRes.ok) {
+        const data = await mRes.json();
+        if (data.canonical_name) targetMat = data.canonical_name;
+      }
+    } catch {
+      // fall back to id
+    }
+    setActiveCabin({ fuel_material: targetMat });
+  } else if (type === 'guideline') {
+    await navigate('ranking');
+    const mod = await ensureTabModule('ranking');
+    mod?.openEntityRankingTab('guidelines');
+  } else if (type === 'experiment') {
+    await navigate('explorer');
+    const mod = await ensureTabModule('explorer');
+    mod?.openExperimentModal(id);
+  } else if (type === 'finding') {
+    await openFindingModal(id);
+  } else if (item.tab) {
+    navigate(item.tab);
+  }
 }
 
 function initGlobalSearch() {
@@ -80,37 +212,11 @@ function initGlobalSearch() {
             row.addEventListener('click', async () => {
               dropdown.classList.remove('open');
               input.value = '';
-              const type = row.dataset.srType;
-              const id = row.dataset.srId;
-              if (type === 'paper') {
-                openDocumentReader(id, 1);
-              } else if (type === 'test_run') {
-                navigate('ranking');
-                selectRunForTelemetry(id);
-              } else if (type === 'material') {
-                navigate('cabin');
-                let targetMat = id;
-                try {
-                  const res = await fetch(`/api/materials/${encodeURIComponent(id)}`);
-                  if (res.ok) {
-                    const data = await res.json();
-                    if (data.canonical_name) targetMat = data.canonical_name;
-                  }
-                } catch {
-                  // fall back to id
-                }
-                setActiveCabin({ fuel_material: targetMat });
-              } else if (type === 'guideline') {
-                navigate('ranking');
-                openEntityRankingTab('guidelines');
-              } else if (type === 'experiment') {
-                navigate('explorer');
-                openExperimentModal(id);
-              } else if (type === 'finding') {
-                await openFindingModal(id);
-              } else {
-                navigate(row.dataset.srTab);
-              }
+              await openSearchItem({
+                type: row.dataset.srType,
+                id: row.dataset.srId,
+                tab: row.dataset.srTab,
+              });
             });
           });
         }
@@ -205,10 +311,17 @@ function closeModal() {
 }
 
 async function bootstrap() {
-  // Apply saved theme immediately
-  setTheme(state.theme);
+  const initialPrefs = applyPreferences(null, { persistLocal: false, persistServer: false });
 
-  // Register PWA service worker for offline shell caching (always check for fresh updates)
+  if (initialPrefs.showIntro !== false && !hasGlassIntroStarted()) {
+    playGlassIntro({ theme: state.theme });
+  } else if (initialPrefs.showIntro === false) {
+    document.getElementById('intro-splash')?.remove();
+    document.body.classList.remove('intro-active');
+    document.querySelector('.hero-section[data-enter]')?.classList.add('is-entered');
+  }
+  window.replayFlameIntro = () => playGlassIntro({ theme: state.theme });
+
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker
       .register('/sw.js', { updateViaCache: 'none' })
@@ -218,21 +331,37 @@ async function bootstrap() {
       });
   }
 
-  // Theme slider toggle
+  let lastDarkPalette =
+    initialPrefs.palette && initialPrefs.palette !== 'warm-paper'
+      ? initialPrefs.palette
+      : 'obsidian-ember';
+
   document.getElementById('theme-toggle-btn')?.addEventListener('click', () => {
-    setTheme(state.theme === 'dark' ? 'light' : 'dark');
+    const prefs = getPreferences();
+    if (state.theme === 'dark') {
+      if (prefs.palette && prefs.palette !== 'warm-paper') lastDarkPalette = prefs.palette;
+      applyPreferences({ palette: 'warm-paper' }, { persistLocal: true, persistServer: true });
+    } else {
+      applyPreferences({ palette: lastDarkPalette || 'obsidian-ember' }, { persistLocal: true, persistServer: true });
+    }
   });
 
-  // Brand emblem & Ask CTA
-  document.getElementById('brand-home-link')?.addEventListener('click', () => navigate('dashboard'));
+  document.getElementById('nav-settings-btn')?.addEventListener('click', () => navigate('settings'));
+  document.querySelector('.engine-status-pill')?.addEventListener('click', () => navigate('settings'));
+
+  document.getElementById('brand-home-link')?.addEventListener('click', (e) => {
+    if (e.shiftKey) {
+      playGlassIntro({ theme: state.theme });
+      return;
+    }
+    navigate('dashboard');
+  });
   document.getElementById('nav-ask-cta')?.addEventListener('click', () => navigate('chat'));
 
-  // Navigation items (top pill bar + mobile drawer)
   document.querySelectorAll('.nav-item').forEach((btn) => {
     btn.addEventListener('click', () => navigate(btn.dataset.tab));
   });
 
-  // Mobile menu button
   document.getElementById('mobile-menu-btn')?.addEventListener('click', (e) => {
     e.stopPropagation();
     document.getElementById('mobile-drawer')?.classList.toggle('open');
@@ -245,7 +374,6 @@ async function bootstrap() {
     }
   });
 
-  // Subtle rAF-throttled ambient cursor glow (skipped under prefers-reduced-motion)
   const reduceMotion = typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   if (!reduceMotion) {
     let glowRaf = null;
@@ -267,61 +395,69 @@ async function bootstrap() {
     );
   }
 
-  // Active scenario pill -> Cabin Lab
   document.getElementById('active-scenario-pill')?.addEventListener('click', () => navigate('cabin'));
-
-  // Modal close handlers
   document.getElementById('global-modal-close')?.addEventListener('click', closeModal);
   document.getElementById('global-modal')?.addEventListener('click', (e) => {
     if (e.target.id === 'global-modal') closeModal();
   });
 
-  // Global delegated clicks for clickable [DOC-XX p.Y] and [EXP-XXXX] badges ANYWHERE
-  document.addEventListener('click', (e) => {
+  // Delegated citation & run clicks lazily load their backing view module on demand
+  document.addEventListener('click', async (e) => {
     const docBtn = e.target.closest('[data-doc-id]');
     if (docBtn) {
       e.preventDefault();
-      openDocumentReader(docBtn.dataset.docId, Number(docBtn.dataset.docPage || 1));
+      const mod = await ensureTabModule('resources');
+      mod?.openDocumentReader(docBtn.dataset.docId, Number(docBtn.dataset.docPage || 1));
       return;
     }
     const expBtn = e.target.closest('[data-exp-id]');
     if (expBtn) {
       e.preventDefault();
       closeModal();
-      navigate('ranking');
-      selectRunForTelemetry(expBtn.dataset.expId);
+      await navigate('ranking');
+      const mod = await ensureTabModule('ranking');
+      mod?.selectRunForTelemetry(expBtn.dataset.expId);
     }
   });
 
-  on('navigate', navigate);
+  on('navigate', (tab) => {
+    navigate(tab);
+  });
   on('modal:open', openModal);
   on('cabin:changed', updateScenarioPill);
   on('cabin:pill-refresh', updateScenarioPill);
   on('cabin:evaluated', updateScenarioPill);
 
+  // Lazy bridge for FlameAI questions triggered from any tab
+  on('chat:ask', async (question) => {
+    await navigate('chat');
+    const mod = await ensureTabModule('chat');
+    mod?.askChatQuestion(question);
+  });
+
+  on('doc:open', async ({ docId, page }) => {
+    const mod = await ensureTabModule('resources');
+    mod?.openDocumentReader(docId, page || 1);
+  });
+
+  on('search:open-item', (item) => {
+    openSearchItem(item);
+  });
+
   initGlobalSearch();
-
-  // Check backend health & label AI engine
-  try {
-    const h = await api.health();
-    const label = document.getElementById('sidebar-ai-engine');
-    if (label) label.textContent = h.ai_engine || 'NASA Grounded Engine';
-  } catch (err) {
-    console.warn('Health check failed:', err);
-  }
-
-  // Initialize all 8 mission modules in parallel
-  await Promise.allSettled([
-    initDashboard(),
-    initFlameTwin(),
-    initCabin(),
-    initRanking(),
-    initExplorer(),
-    initResources(),
-    initGraph(),
-  ]);
-  initChat();
+  initMorphingDock();
+  initScrollReveal();
   updateScenarioPill();
+
+  // Only hydrate the visible Dashboard + lightweight health & persisted settings sync on initial load!
+  await Promise.allSettled([
+    api.health().then((h) => {
+      updateEngineStatusBadge(h.ai_engine || 'NASA Grounded Engine');
+    }).catch(() => {}),
+    syncSettingsOnStartup(),
+    initDashboard(),
+  ]);
+
   navigate('dashboard');
 }
 

@@ -7,9 +7,9 @@ const listeners = new Map();
 export const state = {
   theme: (() => {
     try {
-      return localStorage.getItem('fif_theme_v2') === 'dark' ? 'dark' : 'light';
+      return localStorage.getItem('ignis_theme_v3') === 'light' ? 'light' : 'dark';
     } catch {
-      return 'light';
+      return 'dark';
     }
   })(),
   activeTab: 'dashboard',
@@ -55,10 +55,10 @@ export function setActiveCabin(partial, { silent = false } = {}) {
 }
 
 export function setTheme(theme) {
-  state.theme = theme === 'dark' ? 'dark' : 'light';
+  state.theme = theme === 'light' ? 'light' : 'dark';
   document.documentElement.setAttribute('data-theme', state.theme);
   try {
-    localStorage.setItem('fif_theme_v2', state.theme);
+    localStorage.setItem('ignis_theme_v3', state.theme);
   } catch {
     // ignore storage restrictions
   }
@@ -70,11 +70,11 @@ export function setTheme(theme) {
 export function chartThemeColors() {
   const isLight = state.theme === 'light';
   return {
-    text: isLight ? '#52525b' : '#94a3b8',
-    textStrong: isLight ? '#111827' : '#f8fafc',
-    grid: isLight ? 'rgba(15, 23, 42, 0.07)' : 'rgba(148, 163, 184, 0.14)',
-    tooltipBg: isLight ? 'rgba(255, 255, 255, 0.96)' : 'rgba(15, 23, 42, 0.96)',
-    tooltipBorder: isLight ? 'rgba(15, 23, 42, 0.12)' : 'rgba(148, 163, 184, 0.25)',
+    text: isLight ? '#52525b' : '#a1a1aa',
+    textStrong: isLight ? '#111827' : '#fafafa',
+    grid: isLight ? 'rgba(15, 23, 42, 0.07)' : 'rgba(255, 255, 255, 0.08)',
+    tooltipBg: isLight ? 'rgba(255, 255, 255, 0.96)' : 'rgba(10, 10, 13, 0.96)',
+    tooltipBorder: isLight ? 'rgba(15, 23, 42, 0.12)' : 'rgba(255, 255, 255, 0.14)',
   };
 }
 

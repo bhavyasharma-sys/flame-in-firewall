@@ -1,5 +1,6 @@
-const CACHE_NAME = 'flame-freefall-v8';
+const CACHE_NAME = 'ignis-v9';
 const IMMUTABLE_ASSETS = [
+  '/icons/ignis-logo-256.png',
   '/icons/icon.svg',
   '/icons/icon-192.png',
   '/icons/icon-512.png',
